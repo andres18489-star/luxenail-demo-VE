@@ -6,28 +6,53 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 /**
- * Supabase client instance.
- * If credentials are not provided in environment variables,
- * operations will gracefully fall back to local state.
+ * Instancia del cliente de Supabase.
  */
 export const supabase = (supabaseUrl && supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
 /**
- * Check whether Supabase is configured and connected
+ * Verifica si Supabase está correctamente configurado
  */
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseAnonKey && supabase);
 };
 
 /**
- * Insert a new appointment into Supabase
- * Strict requirement: insert into 'appointments' table with client_name, client_phone, service_id, booking_date, booking_time, amount_usd, bcv_rate_used, status
+ * Mapper interno: Convierte registros en snake_case de la BD a la interfaz Appointment (camelCase)
  */
-export async function saveAppointmentToSupabase(appointment: Omit<Appointment, 'id'>): Promise<{ data: Appointment | null; error: Error | null }> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRowToAppointment(row: any): Appointment {
+  return {
+    id: String(row.id),
+    referenceCode: row.reference_code || '',
+    serviceId: row.service_id || '',
+    serviceName: row.service_name || '',
+    servicePrice: Number(row.amount_usd ?? row.service_price ?? 0),
+    bcvRateUsed: Number(row.bcv_rate_used ?? 0),
+    amountBs: Number(row.amount_bs ?? 0),
+    specialistId: row.specialist_id || '',
+    specialistName: row.specialist_name || '',
+    date: row.booking_date || row.date || '',
+    time: row.booking_time || row.time || '',
+    customerName: row.client_name || row.customer_name || '',
+    customerEmail: row.customer_email || '',
+    customerPhone: row.client_phone || row.customer_phone || '',
+    notes: row.notes || '',
+    status: (row.status as Appointment['status']) || 'Pendiente',
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * Guarda una nueva cita en Supabase
+ */
+export async function saveAppointmentToSupabase(
+  appointment: Omit<Appointment, 'id'>
+): Promise<{ data: Appointment | null; error: Error | null }> {
   if (!supabase) {
-    return { data: null, error: new Error('Supabase no está configurado. Usando estado local.') };
+    return { data: null, error: new Error('Supabase no está configurado.') };
   }
 
   try {
@@ -61,36 +86,16 @@ export async function saveAppointmentToSupabase(appointment: Omit<Appointment, '
       return { data: null, error: new Error(error.message) };
     }
 
-    const formattedData: Appointment = {
-      id: data.id || `app-${Date.now()}`,
-      referenceCode: data.reference_code || appointment.referenceCode,
-      serviceId: data.service_id || appointment.serviceId,
-      serviceName: data.service_name || appointment.serviceName,
-      servicePrice: Number(data.amount_usd || data.service_price || appointment.servicePrice),
-      bcvRateUsed: Number(data.bcv_rate_used || appointment.bcvRateUsed),
-      amountBs: Number(data.amount_bs || appointment.amountBs),
-      specialistId: data.specialist_id || appointment.specialistId,
-      specialistName: data.specialist_name || appointment.specialistName,
-      date: data.booking_date || data.date || appointment.date,
-      time: data.booking_time || data.time || appointment.time,
-      customerName: data.client_name || data.customer_name || appointment.customerName,
-      customerEmail: data.customer_email || appointment.customerEmail,
-      customerPhone: data.client_phone || data.customer_phone || appointment.customerPhone,
-      notes: data.notes || appointment.notes,
-      status: (data.status as Appointment['status']) || appointment.status,
-      createdAt: data.created_at || appointment.createdAt,
-    };
-
-    return { data: formattedData, error: null };
+    return { data: mapRowToAppointment(data), error: null };
   } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error inesperado al guardar la cita en Supabase');
+    const errorObj = err instanceof Error ? err : new Error('Error inesperado al guardar la cita');
     console.error('Unexpected Supabase Error:', errorObj);
     return { data: null, error: errorObj };
   }
 }
 
 /**
- * Fetch all appointments from Supabase
+ * Obtiene todas las citas de Supabase ordenadas por fecha de creación
  */
 export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointment[] | null; error: Error | null }> {
   if (!supabase) {
@@ -108,26 +113,7 @@ export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointme
       return { data: null, error: new Error(error.message) };
     }
 
-    const appointments: Appointment[] = (data || []).map((item) => ({
-      id: String(item.id),
-      referenceCode: item.reference_code || `LXN-${Math.floor(1000 + Math.random() * 9000)}`,
-      serviceId: item.service_id || 'srv-1',
-      serviceName: item.service_name || 'Manicura Rusa',
-      servicePrice: Number(item.amount_usd || item.service_price || 25),
-      bcvRateUsed: Number(item.bcv_rate_used || 68.50),
-      amountBs: Number(item.amount_bs || (Number(item.amount_usd || 25) * 68.50)),
-      specialistId: item.specialist_id || 'spec-1',
-      specialistName: item.specialist_name || 'Especialista',
-      date: item.booking_date || item.date || new Date().toISOString().split('T')[0],
-      time: item.booking_time || item.time || '10:00 AM',
-      customerName: item.client_name || item.customer_name || 'Cliente',
-      customerEmail: item.customer_email || '',
-      customerPhone: item.client_phone || item.customer_phone || '',
-      notes: item.notes || '',
-      status: (item.status as Appointment['status']) || 'Pendiente',
-      createdAt: item.created_at || new Date().toISOString(),
-    }));
-
+    const appointments: Appointment[] = (data || []).map(mapRowToAppointment);
     return { data: appointments, error: null };
   } catch (err: unknown) {
     const errorObj = err instanceof Error ? err : new Error('Error al obtener citas desde Supabase');
@@ -136,7 +122,7 @@ export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointme
 }
 
 /**
- * Update appointment status in Supabase
+ * Actualiza el estado de una cita
  */
 export async function updateAppointmentStatusInSupabase(
   appointmentId: string,
@@ -159,13 +145,13 @@ export async function updateAppointmentStatusInSupabase(
 
     return { success: true, error: null };
   } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error al actualizar estado en Supabase');
+    const errorObj = err instanceof Error ? err : new Error('Error al actualizar estado');
     return { success: false, error: errorObj };
   }
 }
 
 /**
- * Delete record from Supabase
+ * Elimina un registro por ID
  */
 export async function deleteRecordFromSupabase(
   tableName: 'appointments' | 'services',
