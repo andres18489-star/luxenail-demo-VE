@@ -82,6 +82,39 @@ export async function fetchSpecialistsFromSupabase() {
   }
 }
 
+// --- CRUD DE SERVICIOS ---
+export async function saveServiceToSupabase(service: Omit<Service, 'id'>) {
+  if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
+  const { data, error } = await supabase.from('services').insert([service]).select().single();
+  return { data, error };
+}
+
+export async function updateServiceInSupabase(id: string, updates: Partial<Service>) {
+  if (!supabase) return { error: new Error('Supabase no configurado') };
+  const { error } = await supabase.from('services').update(updates).eq('id', id);
+  return { error };
+}
+
+// --- CRUD DE ESPECIALISTAS ---
+export async function saveSpecialistToSupabase(specialist: Omit<Specialist, 'id'>) {
+  if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
+  const { data, error } = await supabase.from('specialists').insert([specialist]).select().single();
+  return { data, error };
+}
+
+export async function updateSpecialistInSupabase(id: string, updates: Partial<Specialist>) {
+  if (!supabase) return { error: new Error('Supabase no configurado') };
+  const { error } = await supabase.from('specialists').update(updates).eq('id', id);
+  return { error };
+}
+
+// --- CRUD DE PORTAFOLIO ---
+export async function savePortfolioItemToSupabase(item: Omit<PortfolioItem, 'id'>) {
+  if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
+  const { data, error } = await supabase.from('portfolio_items').insert([item]).select().single();
+  return { data, error };
+}
+
 export async function saveAppointmentToSupabase(
   appointment: Omit<Appointment, 'id'>
 ): Promise<{ data: Appointment | null; error: Error | null }> {
