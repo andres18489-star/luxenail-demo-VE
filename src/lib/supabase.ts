@@ -12,7 +12,7 @@ export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseAnonKey && supabase);
 };
 
-// Helper para validar si un string es un UUID valido de Postgres
+// Helper para validar si un string es un UUID válido de Postgres
 const isValidUUID = (id?: string | null): boolean => {
   if (!id) return false;
   const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,7 +64,7 @@ export async function saveAppointmentToSupabase(
   }
 
   try {
-    // Mapear el estado del frontend al valor 'CHECK' permitido por la BD en ingles
+    // Mapear el estado del frontend al valor 'CHECK' permitido por la BD en inglés
     const statusDbMap: Record<string, string> = {
       'Pendiente': 'Pending',
       'Confirmada': 'Confirmed',
@@ -96,7 +96,7 @@ export async function saveAppointmentToSupabase(
       bcv_rate_used: Number(appointment.bcvRateUsed) || 0,
       amount_bs: Number(appointment.amountBs) || 0,
 
-      // Validacion estricta de UUID para Foreign Keys
+      // Validación estricta de UUID para Foreign Keys
       service_id: isValidUUID(appointment.serviceId) ? appointment.serviceId : null,
       specialist_id: isValidUUID(appointment.specialistId) ? appointment.specialistId : null,
 
@@ -146,5 +146,72 @@ export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointme
   } catch (err: unknown) {
     const errorObj = err instanceof Error ? err : new Error('Error al obtener citas');
     return { data: null, error: errorObj };
+  }
+}
+
+/**
+ * Actualiza el estado de una cita en Supabase
+ */
+export async function updateAppointmentStatusInSupabase(
+  appointmentId: string,
+  newStatus: Appointment['status']
+): Promise<{ success: boolean; error: Error | null }> {
+  if (!supabase) {
+    return { success: false, error: new Error('Supabase no está configurado.') };
+  }
+
+  try {
+    const statusDbMap: Record<string, string> = {
+      'Pendiente': 'Pending',
+      'Confirmada': 'Confirmed',
+      'Completada': 'Completed',
+      'Cancelada': 'Cancelled'
+    };
+
+    const dbStatus = statusDbMap[newStatus] || newStatus;
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: dbStatus })
+      .eq('id', appointmentId);
+
+    if (error) {
+      console.error('Supabase Update Error:', error.message);
+      return { success: false, error: new Error(error.message) };
+    }
+
+    return { success: true, error: null };
+  } catch (err: unknown) {
+    const errorObj = err instanceof Error ? err : new Error('Error al actualizar estado de la cita');
+    return { success: false, error: errorObj };
+  }
+}
+
+/**
+ * Elimina un registro por ID de cualquier tabla en Supabase
+ */
+export async function deleteRecordFromSupabase(
+  tableName: 'appointments' | 'services' | 'specialists' | 'portfolio_items',
+  id: string
+): Promise<{ success: boolean; error: Error | null }> {
+  if (!supabase) {
+    return { success: false, error: new Error('Supabase no está configurado.') };
+  }
+
+  try {
+    const { error } = await supabase
+      .from(tableName)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error(`Supabase Delete Error in ${tableName}:`, error.message);
+      return { success: false, error: new Error(error.message) };
+    }
+
+    return { success: true, error: null };
+  } catch (err: unknown) {
+    const errorObj = err instanceof Error ? err : new Error('Error al eliminar registro');
+    return { success: false, error: errorObj };
   }
 }
