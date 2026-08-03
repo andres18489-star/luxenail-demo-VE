@@ -22,6 +22,7 @@ export default function App() {
       <BookingProvider>
         <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-rose-200 selection:text-rose-900">
           <Navbar />
+          
           <main>
             <Hero />
             <PopularServices />
@@ -31,10 +32,13 @@ export default function App() {
             <LocationContact />
             
             {/* El AdminPanel queda resguardado con Supabase Auth */}
-            <ProtectedRoute>
-              <AdminPanel />
-            </ProtectedRoute>
+            <section id="admin-panel" className="scroll-mt-24">
+              <ProtectedRoute>
+                <AdminPanel />
+              </ProtectedRoute>
+            </section>
           </main>
+
           <Footer />
 
           {/* Modales y Notificaciones */}

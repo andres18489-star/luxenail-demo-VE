@@ -3,7 +3,16 @@ import { useBooking } from '../context/BookingContext';
 import { Sparkles, Calendar, ShieldCheck, Menu, X, LogOut, LayoutDashboard, RefreshCw } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { openBookingModal, isAdminLoggedIn, openAdminModal, logoutAdmin, setActiveAdminTab, bcvRate, isBcvLoading, refreshBcvRate } = useBooking();
+  const { 
+    openBookingModal, 
+    isAdminLoggedIn, 
+    logoutAdmin, 
+    setActiveAdminTab, 
+    bcvRate, 
+    isBcvLoading, 
+    refreshBcvRate 
+  } = useBooking();
+
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -15,12 +24,21 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (id: string) => {
+  // Función helper para scroll suave y cierre de menú móvil
+  const handleScrollTo = (id: string) => {
     setMobileMenuOpen(false);
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  // Manejador centralizado para ir al área de Admin
+  const handleAdminClick = () => {
+    if (isAdminLoggedIn) {
+      setActiveAdminTab('appointments');
+    }
+    handleScrollTo('admin-panel');
   };
 
   return (
@@ -33,10 +51,7 @@ export const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
-        <a
-          href="#"
-          className="flex items-center gap-2.5 group cursor-pointer"
-        >
+        <a href="#" className="flex items-center gap-2.5 group cursor-pointer">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 via-rose-400 to-amber-300 flex items-center justify-center shadow-md shadow-rose-200 group-hover:scale-105 transition-transform">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
@@ -72,43 +87,26 @@ export const Navbar: React.FC = () => {
 
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-medium text-zinc-700">
-          <button
-            onClick={() => scrollToSection('services')}
-            className="hover:text-rose-600 transition-colors cursor-pointer"
-          >
+          <button onClick={() => handleScrollTo('services')} className="hover:text-rose-600 transition-colors cursor-pointer">
             Servicios & Precios
           </button>
-          <button
-            onClick={() => scrollToSection('gallery')}
-            className="hover:text-rose-600 transition-colors cursor-pointer"
-          >
+          <button onClick={() => handleScrollTo('gallery')} className="hover:text-rose-600 transition-colors cursor-pointer">
             Galería
           </button>
-          <button
-            onClick={() => scrollToSection('staff')}
-            className="hover:text-rose-600 transition-colors cursor-pointer"
-          >
+          <button onClick={() => handleScrollTo('staff')} className="hover:text-rose-600 transition-colors cursor-pointer">
             Especialistas
           </button>
-          <button
-            onClick={() => scrollToSection('contact')}
-            className="hover:text-rose-600 transition-colors cursor-pointer"
-          >
+          <button onClick={() => handleScrollTo('contact')} className="hover:text-rose-600 transition-colors cursor-pointer">
             Ubicación
           </button>
         </nav>
 
-        {/* Action Buttons */}
+        {/* Action Buttons (Desktop) */}
         <div className="hidden md:flex items-center gap-3">
-          {/* Admin Toggle */}
           {isAdminLoggedIn ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  setActiveAdminTab('appointments');
-                  const adminElem = document.getElementById('admin-panel');
-                  if (adminElem) adminElem.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={handleAdminClick}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-zinc-900 text-amber-200 hover:bg-zinc-800 transition-all cursor-pointer shadow-sm"
               >
                 <LayoutDashboard className="w-3.5 h-3.5 text-rose-400" />
@@ -124,7 +122,7 @@ export const Navbar: React.FC = () => {
             </div>
           ) : (
             <button
-              onClick={openAdminModal}
+              onClick={handleAdminClick}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-rose-100/40 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200"
               title="Acceso para personal"
             >
@@ -133,7 +131,6 @@ export const Navbar: React.FC = () => {
             </button>
           )}
 
-          {/* Book Now Main Button */}
           <button
             onClick={() => openBookingModal()}
             className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 text-white font-medium text-sm shadow-md shadow-rose-300/50 hover:shadow-lg hover:shadow-rose-300/80 hover:from-rose-600 hover:to-rose-700 transition-all duration-200 cursor-pointer active:scale-95"
@@ -145,7 +142,6 @@ export const Navbar: React.FC = () => {
 
         {/* Mobile Controls */}
         <div className="md:hidden flex items-center gap-2">
-          {/* Mobile BCV Ticker */}
           <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900">
             <span>BCV:</span>
             <span>{bcvRate.toFixed(2)} Bs</span>
@@ -170,28 +166,16 @@ export const Navbar: React.FC = () => {
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white/98 backdrop-blur-lg border-b border-rose-100 px-6 py-6 space-y-4 shadow-xl">
-          <button
-            onClick={() => scrollToSection('services')}
-            className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600"
-          >
+          <button onClick={() => handleScrollTo('services')} className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600">
             Servicios & Precios
           </button>
-          <button
-            onClick={() => scrollToSection('gallery')}
-            className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600"
-          >
+          <button onClick={() => handleScrollTo('gallery')} className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600">
             Galería de Diseños
           </button>
-          <button
-            onClick={() => scrollToSection('staff')}
-            className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600"
-          >
+          <button onClick={() => handleScrollTo('staff')} className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600">
             Especialistas
           </button>
-          <button
-            onClick={() => scrollToSection('contact')}
-            className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600"
-          >
+          <button onClick={() => handleScrollTo('contact')} className="block w-full text-left py-2 font-medium text-zinc-800 hover:text-rose-600">
             Ubicación & Contacto
           </button>
 
@@ -203,24 +187,16 @@ export const Navbar: React.FC = () => {
 
             {isAdminLoggedIn ? (
               <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setActiveAdminTab('appointments');
-                  const adminElem = document.getElementById('admin-panel');
-                  if (adminElem) adminElem.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full py-2.5 rounded-xl bg-zinc-900 text-amber-200 text-center font-medium text-sm flex items-center justify-center gap-2"
+                onClick={handleAdminClick}
+                className="w-full py-2.5 rounded-xl bg-zinc-900 text-amber-200 text-center font-medium text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LayoutDashboard className="w-4 h-4 text-rose-400" />
                 Ir al Panel Admin
               </button>
             ) : (
               <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  openAdminModal();
-                }}
-                className="w-full py-2 rounded-xl border border-zinc-200 text-zinc-600 text-center text-xs font-medium flex items-center justify-center gap-1.5"
+                onClick={handleAdminClick}
+                className="w-full py-2 rounded-xl border border-zinc-200 text-zinc-600 text-center text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
                 Acceso Administrador
