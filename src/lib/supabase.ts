@@ -48,7 +48,7 @@ function mapRowToAppointment(row: any): Appointment {
   };
 }
 
-// --- FETCH GENERALES (CORREGIDOS CON MAPEO) ---
+// --- FETCH GENERALES ---
 
 export async function fetchServicesFromSupabase() {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado.') };
@@ -56,11 +56,9 @@ export async function fetchServicesFromSupabase() {
     const { data, error } = await supabase.from('services').select('*');
     if (error) throw error;
     
-    // Imagen por defecto en caso de que en Supabase la columna valga NULL, undefined o ""
     const DEFAULT_SERVICE_IMAGE = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
 
     const mappedData = (data || []).map(row => {
-      // Evaluamos todas las posibles columnas o variaciones de nombre
       const resolvedImage = row.image || row.image_url || row.imageUrl || DEFAULT_SERVICE_IMAGE;
 
       return {
@@ -68,7 +66,6 @@ export async function fetchServicesFromSupabase() {
         durationMinutes: row.duration_minutes ?? row.durationMinutes ?? 60,
         reviewsCount: row.reviews_count ?? row.reviewsCount ?? 0,
         isActive: row.is_active ?? row.isActive ?? true,
-        // Garantizamos que ambas propiedades tengan un string válido con la URL
         imageUrl: resolvedImage,
         image: resolvedImage
       };
@@ -86,14 +83,13 @@ export async function fetchSpecialistsFromSupabase() {
     const { data, error } = await supabase.from('specialists').select('*');
     if (error) throw error;
     
-    // Mapeamos avatar_url a avatarUrl
     const mappedData = (data || []).map(row => ({
       ...row,
       avatarUrl: row.avatar_url,
-      avatar: row.avatar_url, // Respaldo por si el front usa solo 'avatar'
-      availableDays: row.available_days,
-      reviewsCount: row.reviews_count,
-      isActive: row.is_active
+      avatar: row.avatar_url,
+      availableDays: row.available_days || ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
+      reviewsCount: row.reviews_count ?? row.reviewsCount ?? 0,
+      isActive: row.is_active ?? row.isActive ?? true
     }));
     
     return { data: mappedData, error: null };
@@ -108,11 +104,10 @@ export async function fetchPortfolioFromSupabase() {
     const { data, error } = await supabase.from('portfolio_items').select('*');
     if (error) throw error;
     
-    // Mapeamos image_url a imageUrl
     const mappedData = (data || []).map(row => ({
       ...row,
       imageUrl: row.image_url,
-      image: row.image_url // Respaldo por si el front usa solo 'image'
+      image: row.image_url
     }));
     
     return { data: mappedData, error: null };
@@ -121,7 +116,8 @@ export async function fetchPortfolioFromSupabase() {
   }
 }
 
-// --- CRUD DE SERVICIOS ---
+// --- CRUD DE SERVICIOS (BLINDADO) ---
+
 export async function saveServiceToSupabase(service: Omit<Service, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
   
@@ -129,7 +125,7 @@ export async function saveServiceToSupabase(service: Omit<Service, 'id'>) {
     name: service.name,
     description: service.description,
     price: service.price,
-    duration_minutes: (service as any).durationMinutes,
+    duration_minutes: (service as any).durationMinutes || 60,
     category: service.category,
     is_active: service.isActive ?? true,
     popular: service.popular ?? false,
@@ -144,18 +140,39 @@ export async function saveServiceToSupabase(service: Omit<Service, 'id'>) {
 
 export async function updateServiceInSupabase(id: string, updates: Partial<Service>) {
   if (!supabase) return { error: new Error('Supabase no configurado') };
-  
-  const payload: any = { ...updates };
-  if ((updates as any).durationMinutes !== undefined) payload.duration_minutes = (updates as any).durationMinutes;
+
+  const payload: Record<string, any> = {};
+
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.price !== undefined) payload.price = updates.price;
+  if (updates.category !== undefined) payload.category = updates.category;
+  if (updates.popular !== undefined) payload.popular = updates.popular;
+  if (updates.rating !== undefined) payload.rating = updates.rating;
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
-  if ((updates as any).reviewsCount !== undefined) payload.reviews_count = (updates as any).reviewsCount;
-  if ((updates as any).imageUrl !== undefined) payload.image = (updates as any).imageUrl;
+
+  if ((updates as any).durationMinutes !== undefined) {
+    payload.duration_minutes = (updates as any).durationMinutes;
+  }
+  if ((updates as any).reviewsCount !== undefined) {
+    payload.reviews_count = (updates as any).reviewsCount;
+  }
   
-  const { error } = await supabase.from('services').update(payload).eq('id', id);
+  const imgUrl = (updates as any).imageUrl || (updates as any).image;
+  if (imgUrl !== undefined) {
+    payload.image = imgUrl;
+  }
+
+  const { error } = await supabase
+    .from('services')
+    .update(payload)
+    .eq('id', id);
+
   return { error };
 }
 
-// --- CRUD DE ESPECIALISTAS ---
+// --- CRUD DE ESPECIALISTAS (BLINDADO) ---
+
 export async function saveSpecialistToSupabase(specialist: Omit<Specialist, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
   
@@ -168,8 +185,8 @@ export async function saveSpecialistToSupabase(specialist: Omit<Specialist, 'id'
     specialty: specialist.specialty,
     rating: specialist.rating ?? 5.0,
     reviews_count: (specialist as any).reviewsCount ?? 1,
-    bio: specialist.bio,
-    available_days: (specialist as any).availableDays
+    bio: specialist.bio || '',
+    available_days: (specialist as any).availableDays || ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
   };
   
   const { data, error } = await supabase.from('specialists').insert([payload]).select().single();
@@ -178,18 +195,37 @@ export async function saveSpecialistToSupabase(specialist: Omit<Specialist, 'id'
 
 export async function updateSpecialistInSupabase(id: string, updates: Partial<Specialist>) {
   if (!supabase) return { error: new Error('Supabase no configurado') };
-  
-  const payload: any = { ...updates };
-  if ((updates as any).avatarUrl !== undefined) payload.avatar_url = (updates as any).avatarUrl;
+
+  const payload: Record<string, any> = {};
+
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.role !== undefined) payload.role = updates.role;
+  if (updates.phone !== undefined) payload.phone = updates.phone;
+  if (updates.specialty !== undefined) payload.specialty = updates.specialty;
+  if (updates.rating !== undefined) payload.rating = updates.rating;
+  if (updates.bio !== undefined) payload.bio = updates.bio;
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
-  if ((updates as any).reviewsCount !== undefined) payload.reviews_count = (updates as any).reviewsCount;
-  if ((updates as any).availableDays !== undefined) payload.available_days = (updates as any).availableDays;
-  
-  const { error } = await supabase.from('specialists').update(payload).eq('id', id);
+
+  if ((updates as any).avatarUrl !== undefined || (updates as any).avatar !== undefined) {
+    payload.avatar_url = (updates as any).avatarUrl || (updates as any).avatar;
+  }
+  if ((updates as any).reviewsCount !== undefined) {
+    payload.reviews_count = (updates as any).reviewsCount;
+  }
+  if ((updates as any).availableDays !== undefined) {
+    payload.available_days = (updates as any).availableDays;
+  }
+
+  const { error } = await supabase
+    .from('specialists')
+    .update(payload)
+    .eq('id', id);
+
   return { error };
 }
 
 // --- CRUD DE PORTAFOLIO ---
+
 export async function savePortfolioItemToSupabase(item: Omit<PortfolioItem, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
   
@@ -206,6 +242,7 @@ export async function savePortfolioItemToSupabase(item: Omit<PortfolioItem, 'id'
 }
 
 // --- APPOINTMENTS CRUD ---
+
 export async function saveAppointmentToSupabase(appointment: Omit<Appointment, 'id'>): Promise<{ data: Appointment | null; error: Error | null }> {
   if (!supabase) return { data: null, error: new Error('Supabase no está configurado.') };
 
