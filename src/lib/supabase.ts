@@ -1,52 +1,60 @@
 import { createClient } from '@supabase/supabase-js';
 import { Appointment } from '../types';
 
-// Retrieve environment variables for Supabase integration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-/**
- * Instancia del cliente de Supabase.
- */
 export const supabase = (supabaseUrl && supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-/**
- * Verifica si Supabase está correctamente configurado
- */
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseAnonKey && supabase);
 };
 
+// Helper para validar si un string es un UUID valido de Postgres
+const isValidUUID = (id?: string | null): boolean => {
+  if (!id) return false;
+  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return regex.test(id);
+};
+
 /**
- * Mapper interno: Convierte registros en snake_case de la BD a la interfaz Appointment (camelCase)
+ * Mapper de la Fila Postgres (Snake Case) -> Objeto TypeScript (Camel Case)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRowToAppointment(row: any): Appointment {
+  // Mapear status en inglés de la BD al español que usa el frontend si es necesario
+  const statusMap: Record<string, Appointment['status']> = {
+    'Pending': 'Pendiente',
+    'Confirmed': 'Confirmada',
+    'Completed': 'Completada',
+    'Cancelled': 'Cancelada'
+  };
+
   return {
     id: String(row.id),
     referenceCode: row.reference_code || '',
     serviceId: row.service_id || '',
     serviceName: row.service_name || '',
-    servicePrice: Number(row.amount_usd ?? row.service_price ?? 0),
+    servicePrice: Number(row.service_price ?? row.amount_usd ?? 0),
     bcvRateUsed: Number(row.bcv_rate_used ?? 0),
     amountBs: Number(row.amount_bs ?? 0),
     specialistId: row.specialist_id || '',
     specialistName: row.specialist_name || '',
-    date: row.booking_date || row.date || '',
-    time: row.booking_time || row.time || '',
-    customerName: row.client_name || row.customer_name || '',
+    date: row.date || row.booking_date || '',
+    time: row.time || row.booking_time || '',
+    customerName: row.customer_name || row.client_name || '',
     customerEmail: row.customer_email || '',
-    customerPhone: row.client_phone || row.customer_phone || '',
+    customerPhone: row.customer_phone || row.client_phone || '',
     notes: row.notes || '',
-    status: (row.status as Appointment['status']) || 'Pendiente',
+    status: statusMap[row.status] || (row.status as Appointment['status']) || 'Pendiente',
     createdAt: row.created_at || new Date().toISOString(),
   };
 }
 
 /**
- * Guarda una nueva cita en Supabase
+ * Inserta una cita respetando el esquema estricto de Supabase
  */
 export async function saveAppointmentToSupabase(
   appointment: Omit<Appointment, 'id'>
@@ -56,23 +64,44 @@ export async function saveAppointmentToSupabase(
   }
 
   try {
+    // Mapear el estado del frontend al valor 'CHECK' permitido por la BD en ingles
+    const statusDbMap: Record<string, string> = {
+      'Pendiente': 'Pending',
+      'Confirmada': 'Confirmed',
+      'Completada': 'Completed',
+      'Cancelada': 'Cancelled'
+    };
+
     const payload = {
+      reference_code: appointment.referenceCode,
+      // Llenamos las columnas requeridas (NOT NULL)
+      customer_name: appointment.customerName,
+      customer_phone: appointment.customerPhone,
+      date: appointment.date,
+      time: appointment.time,
+      
+      // Duplicamos en las secundarias por compatibilidad si la BD las exige
       client_name: appointment.customerName,
       client_phone: appointment.customerPhone,
-      customer_email: appointment.customerEmail || '',
-      service_id: appointment.serviceId,
-      service_name: appointment.serviceName,
-      specialist_id: appointment.specialistId,
-      specialist_name: appointment.specialistName,
       booking_date: appointment.date,
       booking_time: appointment.time,
-      amount_usd: appointment.servicePrice,
-      bcv_rate_used: appointment.bcvRateUsed,
-      amount_bs: appointment.amountBs,
-      reference_code: appointment.referenceCode,
-      notes: appointment.notes || '',
-      status: appointment.status || 'Pendiente',
-      created_at: appointment.createdAt || new Date().toISOString(),
+
+      customer_email: appointment.customerEmail || null,
+      service_name: appointment.serviceName,
+      specialist_name: appointment.specialistName,
+      
+      // Montos
+      service_price: Number(appointment.servicePrice) || 0,
+      amount_usd: Number(appointment.servicePrice) || 0,
+      bcv_rate_used: Number(appointment.bcvRateUsed) || 0,
+      amount_bs: Number(appointment.amountBs) || 0,
+
+      // Validacion estricta de UUID para Foreign Keys
+      service_id: isValidUUID(appointment.serviceId) ? appointment.serviceId : null,
+      specialist_id: isValidUUID(appointment.specialistId) ? appointment.specialistId : null,
+
+      status: statusDbMap[appointment.status] || 'Pending',
+      notes: appointment.notes || ''
     };
 
     const { data, error } = await supabase
@@ -82,24 +111,23 @@ export async function saveAppointmentToSupabase(
       .single();
 
     if (error) {
-      console.error('Supabase Appointment Insert Error:', error.message);
+      console.error('Supabase Insert Error:', error.message, error.details);
       return { data: null, error: new Error(error.message) };
     }
 
     return { data: mapRowToAppointment(data), error: null };
   } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error inesperado al guardar la cita');
-    console.error('Unexpected Supabase Error:', errorObj);
+    const errorObj = err instanceof Error ? err : new Error('Error al guardar cita');
     return { data: null, error: errorObj };
   }
 }
 
 /**
- * Obtiene todas las citas de Supabase ordenadas por fecha de creación
+ * Obtiene todas las citas desde Supabase
  */
 export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointment[] | null; error: Error | null }> {
   if (!supabase) {
-    return { data: null, error: new Error('El cliente de Supabase no está configurado.') };
+    return { data: null, error: new Error('Supabase no está configurado.') };
   }
 
   try {
@@ -113,68 +141,10 @@ export async function fetchAppointmentsFromSupabase(): Promise<{ data: Appointme
       return { data: null, error: new Error(error.message) };
     }
 
-    const appointments: Appointment[] = (data || []).map(mapRowToAppointment);
+    const appointments = (data || []).map(mapRowToAppointment);
     return { data: appointments, error: null };
   } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error al obtener citas desde Supabase');
+    const errorObj = err instanceof Error ? err : new Error('Error al obtener citas');
     return { data: null, error: errorObj };
-  }
-}
-
-/**
- * Actualiza el estado de una cita
- */
-export async function updateAppointmentStatusInSupabase(
-  appointmentId: string,
-  newStatus: Appointment['status']
-): Promise<{ success: boolean; error: Error | null }> {
-  if (!supabase) {
-    return { success: false, error: new Error('Supabase no está configurado.') };
-  }
-
-  try {
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status: newStatus })
-      .eq('id', appointmentId);
-
-    if (error) {
-      console.error('Supabase Update Status Error:', error.message);
-      return { success: false, error: new Error(error.message) };
-    }
-
-    return { success: true, error: null };
-  } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error al actualizar estado');
-    return { success: false, error: errorObj };
-  }
-}
-
-/**
- * Elimina un registro por ID
- */
-export async function deleteRecordFromSupabase(
-  tableName: 'appointments' | 'services',
-  id: string
-): Promise<{ success: boolean; error: Error | null }> {
-  if (!supabase) {
-    return { success: false, error: new Error('Supabase no está configurado.') };
-  }
-
-  try {
-    const { error } = await supabase
-      .from(tableName)
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error(`Supabase Delete Error in ${tableName}:`, error.message);
-      return { success: false, error: new Error(error.message) };
-    }
-
-    return { success: true, error: null };
-  } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error('Error al eliminar registro');
-    return { success: false, error: errorObj };
   }
 }
