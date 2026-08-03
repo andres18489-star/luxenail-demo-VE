@@ -6,18 +6,19 @@ import {
   Appointment,
   BookingFormData,
 } from '../types';
-import {
-  initialServices,
-  initialSpecialists,
-  initialPortfolio,
-  initialAppointments,
-} from '../data/mockData';
+
+// ELIMINAMOS los imports de mockData (initialServices, etc.)
+
 import {
   saveAppointmentToSupabase,
   fetchAppointmentsFromSupabase,
   updateAppointmentStatusInSupabase,
   deleteRecordFromSupabase,
   isSupabaseConfigured,
+  // IMPORTANTE: Asegúrate de tener estas 3 funciones exportadas en supabase.ts
+  fetchServicesFromSupabase,
+  fetchSpecialistsFromSupabase,
+  fetchPortfolioFromSupabase
 } from '../lib/supabase';
 import { fetchBcvRate, BcvRateResponse, formatBs, calculateBs } from '../services/bcvService';
 import { syncMockDataToSupabase } from '../services/seedService';
@@ -34,6 +35,7 @@ interface BookingContextType {
   specialists: Specialist[];
   appointments: Appointment[];
   portfolio: PortfolioItem[];
+  isLoadingData: boolean; // NUEVO: Para mostrar loaders en la UI
   selectedService: Service | null;
   setSelectedService: (service: Service | null) => void;
   selectedSpecialist: Specialist | null;
@@ -97,35 +99,19 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const [isBcvLoading, setIsBcvLoading] = useState<boolean>(true);
 
-  // Services State
-  const [services, setServices] = useState<Service[]>(() => {
-    const saved = localStorage.getItem('luxenail_services');
-    return saved ? JSON.parse(saved) : initialServices;
-  });
-
-  // Specialists State
-  const [specialists, setSpecialists] = useState<Specialist[]>(() => {
-    const saved = localStorage.getItem('luxenail_specialists');
-    return saved ? JSON.parse(saved) : initialSpecialists;
-  });
-
-  // Portfolio State
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>(() => {
-    const saved = localStorage.getItem('luxenail_portfolio');
-    return saved ? JSON.parse(saved) : initialPortfolio;
-  });
-
-  // Appointments State
-  const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = localStorage.getItem('luxenail_appointments');
-    return saved ? JSON.parse(saved) : initialAppointments;
-  });
+  // ESTADOS INICIALES LIMPIOS (Sin localStorage ni mockData)
+  const [services, setServices] = useState<Service[]>([]);
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedSpecialist, setSelectedSpecialist] = useState<Specialist | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [currentAppointment, setCurrentAppointment] = useState<Appointment | null>(null);
 
+  // Autenticación de Admin sí se mantiene en localStorage
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('luxenail_admin_auth') === 'true';
   });
@@ -134,6 +120,13 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [toast, setToast] = useState<Toast | null>(null);
   const isSupabaseActive = isSupabaseConfigured();
+
+  const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 4000);
+  }, []);
 
   // Load BCV Rate on mount
   const refreshBcvRate = useCallback(async () => {
@@ -150,58 +143,51 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     refreshBcvRate();
-    // Refresh BCV rate every 15 minutes
     const interval = setInterval(refreshBcvRate, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [refreshBcvRate]);
 
-  // Format Helper
   const formatBsAmount = useCallback((amountInUsd: number) => {
     return formatBs(amountInUsd, bcvInfo.rate);
   }, [bcvInfo.rate]);
 
-  // Load appointments from Supabase if configured
-// CÓDIGO ACTUALIZADO:
-useEffect(() => {
-  const initSupabaseData = async () => {
-    if (isSupabaseActive) {
-      // 1. Verificar y poblar las tablas si están vacías
-      await syncMockDataToSupabase();
-
-      // 2. Cargar las citas existentes desde Supabase
-      const { data, error } = await fetchAppointmentsFromSupabase();
-      if (!error && data && data.length > 0) {
-        setAppointments(data);
+  // CÓDIGO ACTUALIZADO: Fetch paralelo de toda la data de Supabase
+  useEffect(() => {
+    const initSupabaseData = async () => {
+      if (!isSupabaseActive) {
+        setIsLoadingData(false);
+        return;
       }
-    }
-  };
+      
+      try {
+        setIsLoadingData(true);
+        // Si tienes una función de seeding para llenar tablas vacías, déjala aquí:
+        await syncMockDataToSupabase();
 
-  initSupabaseData();
-}, [isSupabaseActive]);
+        // Disparamos todas las consultas al mismo tiempo para máxima velocidad
+        const [appRes, servRes, specRes, portRes] = await Promise.all([
+          fetchAppointmentsFromSupabase(),
+          fetchServicesFromSupabase(),
+          fetchSpecialistsFromSupabase(),
+          fetchPortfolioFromSupabase()
+        ]);
 
-  // Persist state arrays to localStorage
-  useEffect(() => {
-    localStorage.setItem('luxenail_services', JSON.stringify(services));
-  }, [services]);
+        if (appRes.data) setAppointments(appRes.data);
+        if (servRes.data) setServices(servRes.data);
+        if (specRes.data) setSpecialists(specRes.data);
+        if (portRes.data) setPortfolio(portRes.data);
+      } catch (error) {
+        console.error("Error al cargar datos desde Supabase:", error);
+        showToast("Error de conexión con la base de datos", "error");
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
 
-  useEffect(() => {
-    localStorage.setItem('luxenail_specialists', JSON.stringify(specialists));
-  }, [specialists]);
+    initSupabaseData();
+  }, [isSupabaseActive, showToast]);
 
-  useEffect(() => {
-    localStorage.setItem('luxenail_portfolio', JSON.stringify(portfolio));
-  }, [portfolio]);
-
-  useEffect(() => {
-    localStorage.setItem('luxenail_appointments', JSON.stringify(appointments));
-  }, [appointments]);
-
-  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast(null);
-    }, 4000);
-  };
+  // NOTA: Se eliminaron los 4 useEffect que guardaban data en localStorage.
 
   const openBookingModal = (service?: Service | null, specialist?: Specialist | null) => {
     if (service) setSelectedService(service);
@@ -248,7 +234,7 @@ useEffect(() => {
       if (!error && data) {
         setAppointments((prev) => [data, ...prev]);
         setCurrentAppointment(data);
-        showToast('Cita guardada en Supabase correctamente');
+        showToast('Cita guardada correctamente');
         return data;
       }
     }
@@ -277,11 +263,11 @@ useEffect(() => {
     showToast('Cita eliminada', 'info');
   };
 
-  // SERVICES CRUD
+  // SERVICES CRUD (Nota: El persistir hacia Supabase desde aquí será el siguiente paso del SaaS)
   const addService = (newService: Omit<Service, 'id'>) => {
     const serviceWithId: Service = {
       ...newService,
-      id: `srv-${Date.now()}`,
+      id: `srv-${Date.now()}`, // En el futuro cambiaremos esto por generación de UUID si guardas desde admin
       isActive: newService.isActive ?? true,
       durationMinutes: newService.durationMinutes ?? newService.duration ?? 60,
       duration: newService.durationMinutes ?? newService.duration ?? 60,
@@ -299,14 +285,9 @@ useEffect(() => {
       prev.map((srv) => {
         if (srv.id === id) {
           const updated = { ...srv, ...updatedData };
-          if (updatedData.durationMinutes !== undefined) {
-            updated.duration = updatedData.durationMinutes;
-          }
-          if (updatedData.imageUrl) {
-            updated.image = updatedData.imageUrl;
-          } else if (updatedData.image) {
-            updated.imageUrl = updatedData.image;
-          }
+          if (updatedData.durationMinutes !== undefined) updated.duration = updatedData.durationMinutes;
+          if (updatedData.imageUrl) updated.image = updatedData.imageUrl;
+          else if (updatedData.image) updated.imageUrl = updatedData.image;
           return updated;
         }
         return srv;
@@ -432,6 +413,7 @@ useEffect(() => {
         specialists,
         appointments,
         portfolio,
+        isLoadingData, // Exportado para la UI
         selectedService,
         setSelectedService,
         selectedSpecialist,
