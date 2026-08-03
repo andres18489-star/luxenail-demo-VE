@@ -13,6 +13,15 @@ const CATEGORIES = [
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
 
+// Función auxiliar para normalizar cadenas de texto (quita tildes, espacios extras y pasa a minúsculas)
+const normalizeText = (text: string) => {
+  return (text || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remueve acentos
+    .trim();
+};
+
 export const FullServices: React.FC = () => {
   const { services, openBookingModal, formatBsAmount } = useBooking();
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
@@ -22,10 +31,22 @@ export const FullServices: React.FC = () => {
   const activeServices = services.filter((s) => s.isActive !== false);
 
   const filteredServices = activeServices.filter((service) => {
-    const matchesCategory = selectedCategory === 'Todos' || service.category === selectedCategory;
+    // Normalización de la categoría seleccionada y la categoría del servicio
+    const normSelected = normalizeText(selectedCategory);
+    const normServiceCat = normalizeText(service.category);
+
+    const matchesCategory =
+      selectedCategory === 'Todos' ||
+      normServiceCat === normSelected ||
+      // Soporta variaciones como "Arte & Diseños" vs "Arte y Diseños"
+      normServiceCat.includes(normSelected.replace('&', 'y')) ||
+      normSelected.includes(normServiceCat);
+
+    const normQuery = normalizeText(searchQuery);
     const matchesSearch =
-      service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      service.description.toLowerCase().includes(searchQuery.toLowerCase());
+      normalizeText(service.name).includes(normQuery) ||
+      normalizeText(service.description).includes(normQuery);
+
     return matchesCategory && matchesSearch;
   });
 
@@ -128,7 +149,7 @@ export const FullServices: React.FC = () => {
                       )}
                       <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900/85 backdrop-blur-md text-white text-xs font-medium shadow-sm">
                         <Clock className="w-3 h-3 text-amber-300" />
-                        {service.durationMinutes || service.duration || 60}m
+                        {service.durationMinutes || (service as any).duration || 60}m
                       </div>
                     </div>
                   </div>
@@ -157,7 +178,7 @@ export const FullServices: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 font-medium">
                     <span className="flex items-center gap-1 text-zinc-700 font-semibold bg-zinc-100 px-2.5 py-1 rounded-lg">
                       <Clock className="w-3.5 h-3.5 text-rose-500" />
-                      {service.durationMinutes || service.duration || 60} minutos
+                      {service.durationMinutes || (service as any).duration || 60} minutos
                     </span>
                     <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -170,7 +191,7 @@ export const FullServices: React.FC = () => {
                   <div className="flex items-center gap-1 text-xs text-zinc-500">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
                     <strong className="text-zinc-800 font-bold">{service.rating || 5.0}</strong>
-                    <span className="text-zinc-400">({service.reviewsCount || 1} opiniones)</span>
+                    <span className="text-zinc-400">({(service as any).reviewsCount || 1} opiniones)</span>
                   </div>
 
                   <button
