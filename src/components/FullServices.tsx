@@ -13,12 +13,11 @@ const CATEGORIES = [
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
 
-// Función auxiliar para normalizar cadenas de texto (quita tildes, espacios extras y pasa a minúsculas)
 const normalizeText = (text: string) => {
   return (text || '')
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Remueve acentos
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 };
 
@@ -27,23 +26,39 @@ export const FullServices: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Public menu shows active services (isActive !== false)
+  // 1. DIAGNÓSTICO EN CONSOLA (Abre F12 -> Consola en tu navegador para ver qué llega de Supabase)
+  console.log('--- SERVICIOS Y SUS CATEGORÍAS REALES ---');
+  services.forEach(s => console.log(`Servicio: "${s.name}" | Categoría: "${s.category}"`));
+
   const activeServices = services.filter((s) => s.isActive !== false);
 
   const filteredServices = activeServices.filter((service) => {
-    // Normalización de la categoría seleccionada y la categoría del servicio
-    const normSelected = normalizeText(selectedCategory);
-    const normServiceCat = normalizeText(service.category);
+    if (selectedCategory === 'Todos') {
+      const normQuery = normalizeText(searchQuery);
+      return (
+        !normQuery ||
+        normalizeText(service.name).includes(normQuery) ||
+        normalizeText(service.description).includes(normQuery)
+      );
+    }
 
+    const normSelected = normalizeText(selectedCategory);
+    // Extraemos la categoría del servicio buscando en múltiples propiedades por si acaso
+    const rawCategory = service.category || (service as any).categoria || '';
+    const normServiceCat = normalizeText(rawCategory);
+
+    // Comparación súper permisiva
     const matchesCategory =
-      selectedCategory === 'Todos' ||
       normServiceCat === normSelected ||
-      // Soporta variaciones como "Arte & Diseños" vs "Arte y Diseños"
-      normServiceCat.includes(normSelected.replace('&', 'y')) ||
-      normSelected.includes(normServiceCat);
+      normServiceCat.includes(normSelected) ||
+      normSelected.includes(normServiceCat) ||
+      // Soporta "Arte & Diseños" vs "Arte y Diseños" o simplemente "Arte" / "Diseño"
+      (normSelected.includes('arte') && normServiceCat.includes('arte')) ||
+      (normSelected.includes('lashes') && (normServiceCat.includes('pesta') || normServiceCat.includes('lashes')));
 
     const normQuery = normalizeText(searchQuery);
     const matchesSearch =
+      !normQuery ||
       normalizeText(service.name).includes(normQuery) ||
       normalizeText(service.description).includes(normQuery);
 
@@ -103,15 +118,20 @@ export const FullServices: React.FC = () => {
         {/* Service List */}
         {filteredServices.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-3xl border border-rose-100">
-            <p className="text-zinc-500 text-sm font-medium">No se encontraron servicios que coincidan con tu búsqueda.</p>
+            <p className="text-zinc-500 text-sm font-medium">
+              No se encontraron servicios en la categoría <strong>"{selectedCategory}"</strong>.
+            </p>
+            <p className="text-xs text-zinc-400 mt-1">
+              (Sugerencia: Revisa en la consola F12 cómo están guardadas las categorías en la base de datos)
+            </p>
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('Todos');
               }}
-              className="mt-3 text-xs font-semibold text-rose-600 underline cursor-pointer"
+              className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-full text-xs font-semibold hover:bg-rose-700 transition-colors cursor-pointer"
             >
-              Restablecer Filtros
+              Ver Todos los Servicios
             </button>
           </div>
         ) : (
@@ -136,7 +156,7 @@ export const FullServices: React.FC = () => {
                     {/* Category Badge Overlay */}
                     <div className="absolute top-3 left-3 z-10">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm">
-                        {service.category}
+                        {service.category || 'General'}
                       </span>
                     </div>
 
