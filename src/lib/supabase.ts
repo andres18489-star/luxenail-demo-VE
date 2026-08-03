@@ -56,16 +56,23 @@ export async function fetchServicesFromSupabase() {
     const { data, error } = await supabase.from('services').select('*');
     if (error) throw error;
     
-    // Mapeamos las propiedades de snake_case a camelCase para el frontend
-    const mappedData = (data || []).map(row => ({
-      ...row,
-      durationMinutes: row.duration_minutes,
-      reviewsCount: row.reviews_count,
-      isActive: row.is_active,
-      // Aseguramos que el frontend reciba la imagen bajo cualquier nombre que espere
-      imageUrl: row.image || row.image_url,
-      image: row.image || row.image_url
-    }));
+    // Imagen por defecto en caso de que en Supabase la columna valga NULL, undefined o ""
+    const DEFAULT_SERVICE_IMAGE = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
+
+    const mappedData = (data || []).map(row => {
+      // Evaluamos todas las posibles columnas o variaciones de nombre
+      const resolvedImage = row.image || row.image_url || row.imageUrl || DEFAULT_SERVICE_IMAGE;
+
+      return {
+        ...row,
+        durationMinutes: row.duration_minutes ?? row.durationMinutes ?? 60,
+        reviewsCount: row.reviews_count ?? row.reviewsCount ?? 0,
+        isActive: row.is_active ?? row.isActive ?? true,
+        // Garantizamos que ambas propiedades tengan un string válido con la URL
+        imageUrl: resolvedImage,
+        image: resolvedImage
+      };
+    });
     
     return { data: mappedData, error: null };
   } catch (err) {
