@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, Sparkles, Loader2 } from 'lucide-react';
+import { Lock, User, Sparkles, Loader2 } from 'lucide-react';
 
 export const AdminLogin: React.FC = () => {
   const { loginWithEmail } = useAuth();
-  const [email, setEmail] = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -14,12 +14,23 @@ export const AdminLogin: React.FC = () => {
     setIsSubmitting(true);
     setErrorMsg('');
 
-    const { error } = await loginWithEmail(email, password);
+    // 1. Limpiamos espacios alrededor
+    const cleanInput = usernameInput.trim().toLowerCase();
+
+    // 2. Si no incluye '@', le añadimos el dominio interno de Supabase
+    const finalEmail = cleanInput.includes('@')
+      ? cleanInput
+      : `${cleanInput}@luxenail.internal`;
+
+    // 3. Enviamos las credenciales procesadas a Supabase
+    const { error } = await loginWithEmail(finalEmail, password);
 
     if (error) {
-      setErrorMsg(error.message === 'Invalid login credentials' 
-        ? 'Credenciales inválidas. Verifica tu correo y contraseña.' 
-        : error.message);
+      setErrorMsg(
+        error.message === 'Invalid login credentials'
+          ? 'Credenciales inválidas. Verifica tu usuario y contraseña.'
+          : error.message
+      );
     }
     setIsSubmitting(false);
   };
@@ -32,33 +43,37 @@ export const AdminLogin: React.FC = () => {
             <Sparkles className="w-6 h-6" />
           </div>
           <h2 className="font-serif text-2xl font-bold text-zinc-900">Acceso Administrativo</h2>
-          <p className="text-xs text-zinc-500 mt-1">Ingresa con tus credenciales de Supabase</p>
+          <p className="text-xs text-zinc-500 mt-1">Ingresa con tus credenciales de acceso</p>
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
+          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium text-center">
             {errorMsg}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-zinc-700 mb-1.5">Correo Electrónico</label>
+            <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
+              Usuario o Correo
+            </label>
             <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@tu-estudio.com"
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                placeholder="Ej: admin"
                 className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-400 text-zinc-800"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-700 mb-1.5">Contraseña</label>
+            <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
+              Contraseña
+            </label>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input
