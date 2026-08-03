@@ -1,7 +1,7 @@
 /**
  * Service to fetch official Central Bank of Venezuela (BCV) exchange rate.
- * Primary source: https://pydolarve.org/api/v1/dollar?page=bcv
- * Backup source: https://ve.dolarapi.com/v1/dolares/oficial
+ * Primary source: https://ve.dolarapi.com/v1/dolares/oficial (Fast & Reliable)
+ * Backup source: https://pydolarve.org/api/v1/dollar?page=bcv
  */
 
 export interface BcvRateResponse {
@@ -15,7 +15,32 @@ export interface BcvRateResponse {
 const FALLBACK_BCV_RATE = 68.50;
 
 export async function fetchBcvRate(): Promise<BcvRateResponse> {
-  // Try Primary API (PyDolarVe)
+  // 1. Try Primary API (DolarApi VE - Ultra fast & CORS-friendly)
+  try {
+    const backupResponse = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (backupResponse.ok) {
+      const backupData = await backupResponse.json();
+      if (backupData?.promedio) {
+        const price = parseFloat(backupData.promedio);
+        if (!isNaN(price) && price > 0) {
+          return {
+            rate: price,
+            lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+            isFallback: false,
+            source: 'BCV Oficial (DolarApi)',
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('DolarApi fetch failed, trying secondary API...', error);
+  }
+
+  // 2. Try Secondary API (PyDolarVe)
   try {
     const response = await fetch('https://pydolarve.org/api/v1/dollar?page=bcv', {
       method: 'GET',
@@ -24,7 +49,6 @@ export async function fetchBcvRate(): Promise<BcvRateResponse> {
 
     if (response.ok) {
       const data = await response.json();
-      // PyDolarVe response format can have monitors.bcv.price or array of monitors
       let price: number | null = null;
       let lastUpdated = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
@@ -50,31 +74,10 @@ export async function fetchBcvRate(): Promise<BcvRateResponse> {
       }
     }
   } catch (error) {
-    console.warn('PyDolarVe API fetch failed, trying fallback API...', error);
+    console.warn('PyDolarVe API fetch failed, using internal fallback rate', error);
   }
 
-  // Try Backup API (DolarApi VE)
-  try {
-    const backupResponse = await fetch('https://ve.dolarapi.com/v1/dolares/oficial');
-    if (backupResponse.ok) {
-      const backupData = await backupResponse.json();
-      if (backupData?.promedio) {
-        const price = parseFloat(backupData.promedio);
-        if (!isNaN(price) && price > 0) {
-          return {
-            rate: price,
-            lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
-            isFallback: false,
-            source: 'BCV Oficial (DolarApi)',
-          };
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('DolarApi fetch failed, using internal fallback rate', error);
-  }
-
-  // Fallback to internal static rate
+  // 3. Fallback to internal static rate (Zero Crashes)
   return {
     rate: FALLBACK_BCV_RATE,
     lastUpdated: new Date().toLocaleDateString('es-VE') + ' (Referencial)',
