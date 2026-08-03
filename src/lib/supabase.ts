@@ -48,14 +48,26 @@ function mapRowToAppointment(row: any): Appointment {
   };
 }
 
-// --- FETCH GENERALES ---
-// NOTA CTO: Eliminado el eq('isActive', true) para que el Admin Panel pueda gestionarlos.
+// --- FETCH GENERALES (CORREGIDOS CON MAPEO) ---
+
 export async function fetchServicesFromSupabase() {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado.') };
   try {
     const { data, error } = await supabase.from('services').select('*');
     if (error) throw error;
-    return { data, error: null };
+    
+    // Mapeamos las propiedades de snake_case a camelCase para el frontend
+    const mappedData = (data || []).map(row => ({
+      ...row,
+      durationMinutes: row.duration_minutes,
+      reviewsCount: row.reviews_count,
+      isActive: row.is_active,
+      // Aseguramos que el frontend reciba la imagen bajo cualquier nombre que espere
+      imageUrl: row.image || row.image_url,
+      image: row.image || row.image_url
+    }));
+    
+    return { data: mappedData, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Error al obtener servicios') };
   }
@@ -66,19 +78,37 @@ export async function fetchSpecialistsFromSupabase() {
   try {
     const { data, error } = await supabase.from('specialists').select('*');
     if (error) throw error;
-    return { data, error: null };
+    
+    // Mapeamos avatar_url a avatarUrl
+    const mappedData = (data || []).map(row => ({
+      ...row,
+      avatarUrl: row.avatar_url,
+      avatar: row.avatar_url, // Respaldo por si el front usa solo 'avatar'
+      availableDays: row.available_days,
+      reviewsCount: row.reviews_count,
+      isActive: row.is_active
+    }));
+    
+    return { data: mappedData, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Error al obtener especialistas') };
   }
 }
 
-// Faltaba esta función para el portafolio
 export async function fetchPortfolioFromSupabase() {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado.') };
   try {
     const { data, error } = await supabase.from('portfolio_items').select('*');
     if (error) throw error;
-    return { data, error: null };
+    
+    // Mapeamos image_url a imageUrl
+    const mappedData = (data || []).map(row => ({
+      ...row,
+      imageUrl: row.image_url,
+      image: row.image_url // Respaldo por si el front usa solo 'image'
+    }));
+    
+    return { data: mappedData, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Error al obtener portafolio') };
   }
@@ -87,33 +117,84 @@ export async function fetchPortfolioFromSupabase() {
 // --- CRUD DE SERVICIOS ---
 export async function saveServiceToSupabase(service: Omit<Service, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
-  const { data, error } = await supabase.from('services').insert([service]).select().single();
+  
+  const payload = {
+    name: service.name,
+    description: service.description,
+    price: service.price,
+    duration_minutes: (service as any).durationMinutes,
+    category: service.category,
+    is_active: service.isActive ?? true,
+    popular: service.popular ?? false,
+    image: (service as any).image || (service as any).imageUrl,
+    rating: service.rating ?? 5.0,
+    reviews_count: (service as any).reviewsCount ?? 1
+  };
+  
+  const { data, error } = await supabase.from('services').insert([payload]).select().single();
   return { data, error };
 }
 
 export async function updateServiceInSupabase(id: string, updates: Partial<Service>) {
   if (!supabase) return { error: new Error('Supabase no configurado') };
-  const { error } = await supabase.from('services').update(updates).eq('id', id);
+  
+  const payload: any = { ...updates };
+  if ((updates as any).durationMinutes !== undefined) payload.duration_minutes = (updates as any).durationMinutes;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+  if ((updates as any).reviewsCount !== undefined) payload.reviews_count = (updates as any).reviewsCount;
+  if ((updates as any).imageUrl !== undefined) payload.image = (updates as any).imageUrl;
+  
+  const { error } = await supabase.from('services').update(payload).eq('id', id);
   return { error };
 }
 
 // --- CRUD DE ESPECIALISTAS ---
 export async function saveSpecialistToSupabase(specialist: Omit<Specialist, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
-  const { data, error } = await supabase.from('specialists').insert([specialist]).select().single();
+  
+  const payload = {
+    name: specialist.name,
+    role: specialist.role,
+    phone: specialist.phone,
+    avatar_url: (specialist as any).avatarUrl || (specialist as any).avatar,
+    is_active: specialist.isActive ?? true,
+    specialty: specialist.specialty,
+    rating: specialist.rating ?? 5.0,
+    reviews_count: (specialist as any).reviewsCount ?? 1,
+    bio: specialist.bio,
+    available_days: (specialist as any).availableDays
+  };
+  
+  const { data, error } = await supabase.from('specialists').insert([payload]).select().single();
   return { data, error };
 }
 
 export async function updateSpecialistInSupabase(id: string, updates: Partial<Specialist>) {
   if (!supabase) return { error: new Error('Supabase no configurado') };
-  const { error } = await supabase.from('specialists').update(updates).eq('id', id);
+  
+  const payload: any = { ...updates };
+  if ((updates as any).avatarUrl !== undefined) payload.avatar_url = (updates as any).avatarUrl;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+  if ((updates as any).reviewsCount !== undefined) payload.reviews_count = (updates as any).reviewsCount;
+  if ((updates as any).availableDays !== undefined) payload.available_days = (updates as any).availableDays;
+  
+  const { error } = await supabase.from('specialists').update(payload).eq('id', id);
   return { error };
 }
 
 // --- CRUD DE PORTAFOLIO ---
 export async function savePortfolioItemToSupabase(item: Omit<PortfolioItem, 'id'>) {
   if (!supabase) return { data: null, error: new Error('Supabase no configurado') };
-  const { data, error } = await supabase.from('portfolio_items').insert([item]).select().single();
+  
+  const payload = {
+    title: item.title,
+    image_url: (item as any).imageUrl || (item as any).image,
+    category: item.category,
+    artist: item.artist,
+    likes: item.likes ?? 0
+  };
+  
+  const { data, error } = await supabase.from('portfolio_items').insert([payload]).select().single();
   return { data, error };
 }
 
