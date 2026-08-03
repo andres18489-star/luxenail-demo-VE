@@ -7,19 +7,23 @@ import {
   BookingFormData,
 } from '../types';
 
-// ELIMINAMOS los imports de mockData (initialServices, etc.)
-
+// Unificado y limpio:
 import {
+  saveServiceToSupabase,
+  updateServiceInSupabase,
+  saveSpecialistToSupabase,
+  updateSpecialistInSupabase,
+  savePortfolioItemToSupabase,
   saveAppointmentToSupabase,
   fetchAppointmentsFromSupabase,
   updateAppointmentStatusInSupabase,
   deleteRecordFromSupabase,
   isSupabaseConfigured,
-  // IMPORTANTE: Asegúrate de tener estas 3 funciones exportadas en supabase.ts
   fetchServicesFromSupabase,
   fetchSpecialistsFromSupabase,
   fetchPortfolioFromSupabase
 } from '../lib/supabase';
+
 import { fetchBcvRate, BcvRateResponse, formatBs, calculateBs } from '../services/bcvService';
 import { syncMockDataToSupabase } from '../services/seedService';
 
@@ -35,7 +39,7 @@ interface BookingContextType {
   specialists: Specialist[];
   appointments: Appointment[];
   portfolio: PortfolioItem[];
-  isLoadingData: boolean; // NUEVO: Para mostrar loaders en la UI
+  isLoadingData: boolean;
   selectedService: Service | null;
   setSelectedService: (service: Service | null) => void;
   selectedSpecialist: Specialist | null;
@@ -46,33 +50,28 @@ interface BookingContextType {
   currentAppointment: Appointment | null;
   setCurrentAppointment: (app: Appointment | null) => void;
   
-  // BCV Exchange Rate State
   bcvInfo: BcvRateResponse;
   bcvRate: number;
   isBcvLoading: boolean;
   refreshBcvRate: () => Promise<void>;
   formatBsAmount: (amountInUsd: number) => string;
 
-  // Appointments CRUD
   createAppointment: (formData: BookingFormData) => Promise<Appointment>;
   updateAppointmentStatus: (id: string, status: Appointment['status']) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
 
-  // Services CRUD
-  addService: (newService: Omit<Service, 'id'>) => void;
-  updateService: (id: string, updatedData: Partial<Service>) => void;
-  toggleServiceActive: (id: string) => void;
-  deleteService: (id: string) => void;
+  addService: (newService: Omit<Service, 'id'>) => Promise<void>;
+  updateService: (id: string, updatedData: Partial<Service>) => Promise<void>;
+  toggleServiceActive: (id: string) => Promise<void>;
+  deleteService: (id: string) => Promise<void>;
 
-  // Specialists CRUD
-  addSpecialist: (newSpec: Omit<Specialist, 'id'>) => void;
-  updateSpecialist: (id: string, updatedData: Partial<Specialist>) => void;
-  toggleSpecialistActive: (id: string) => void;
-  deleteSpecialist: (id: string) => void;
+  addSpecialist: (newSpec: Omit<Specialist, 'id'>) => Promise<void>;
+  updateSpecialist: (id: string, updatedData: Partial<Specialist>) => Promise<void>;
+  toggleSpecialistActive: (id: string) => Promise<void>;
+  deleteSpecialist: (id: string) => Promise<void>;
 
-  // Portfolio CRUD
-  addPortfolioItem: (newItem: Omit<PortfolioItem, 'id'>) => void;
-  deletePortfolioItem: (id: string) => void;
+  addPortfolioItem: (newItem: Omit<PortfolioItem, 'id'>) => Promise<void>;
+  deletePortfolioItem: (id: string) => Promise<void>;
 
   isAdminLoggedIn: boolean;
   loginAdmin: (password: string) => boolean;
@@ -90,7 +89,6 @@ interface BookingContextType {
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // BCV State
   const [bcvInfo, setBcvInfo] = useState<BcvRateResponse>({
     rate: 68.50,
     lastUpdated: 'Cargando...',
@@ -99,7 +97,6 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const [isBcvLoading, setIsBcvLoading] = useState<boolean>(true);
 
-  // ESTADOS INICIALES LIMPIOS (Sin localStorage ni mockData)
   const [services, setServices] = useState<Service[]>([]);
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
@@ -111,7 +108,6 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [currentAppointment, setCurrentAppointment] = useState<Appointment | null>(null);
 
-  // Autenticación de Admin sí se mantiene en localStorage
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('luxenail_admin_auth') === 'true';
   });
@@ -123,12 +119,9 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => {
-      setToast(null);
-    }, 4000);
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
-  // Load BCV Rate on mount
   const refreshBcvRate = useCallback(async () => {
     setIsBcvLoading(true);
     try {
@@ -151,7 +144,6 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return formatBs(amountInUsd, bcvInfo.rate);
   }, [bcvInfo.rate]);
 
-  // CÓDIGO ACTUALIZADO: Fetch paralelo de toda la data de Supabase
   useEffect(() => {
     const initSupabaseData = async () => {
       if (!isSupabaseActive) {
@@ -161,10 +153,8 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       try {
         setIsLoadingData(true);
-        // Si tienes una función de seeding para llenar tablas vacías, déjala aquí:
         await syncMockDataToSupabase();
 
-        // Disparamos todas las consultas al mismo tiempo para máxima velocidad
         const [appRes, servRes, specRes, portRes] = await Promise.all([
           fetchAppointmentsFromSupabase(),
           fetchServicesFromSupabase(),
@@ -177,7 +167,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (specRes.data) setSpecialists(specRes.data);
         if (portRes.data) setPortfolio(portRes.data);
       } catch (error) {
-        console.error("Error al cargar datos desde Supabase:", error);
+        console.error("Error al cargar datos:", error);
         showToast("Error de conexión con la base de datos", "error");
       } finally {
         setIsLoadingData(false);
@@ -187,36 +177,27 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     initSupabaseData();
   }, [isSupabaseActive, showToast]);
 
-  // NOTA: Se eliminaron los 4 useEffect que guardaban data en localStorage.
-
   const openBookingModal = (service?: Service | null, specialist?: Specialist | null) => {
     if (service) setSelectedService(service);
     if (specialist) setSelectedSpecialist(specialist);
     setIsBookingModalOpen(true);
   };
+  const closeBookingModal = () => setIsBookingModalOpen(false);
 
-  const closeBookingModal = () => {
-    setIsBookingModalOpen(false);
-  };
-
-  // APPOINTMENT CRUD
+  // --- APPOINTMENTS ---
   const createAppointment = async (formData: BookingFormData): Promise<Appointment> => {
     const serviceObj = services.find((s) => s.id === formData.serviceId) || services[0];
     const specialistObj = specialists.find((sp) => sp.id === formData.specialistId) || specialists[0];
 
     const refNumber = Math.floor(1000 + Math.random() * 9000);
-    const priceUsd = serviceObj.price;
-    const currentRate = bcvInfo.rate;
-    const calculatedBs = calculateBs(priceUsd, currentRate);
-
     const newAppointment: Appointment = {
       id: `app-${Date.now()}`,
       referenceCode: `LXN-${refNumber}`,
       serviceId: serviceObj.id,
       serviceName: serviceObj.name,
-      servicePrice: priceUsd,
-      bcvRateUsed: currentRate,
-      amountBs: calculatedBs,
+      servicePrice: serviceObj.price,
+      bcvRateUsed: bcvInfo.rate,
+      amountBs: calculateBs(serviceObj.price, bcvInfo.rate),
       specialistId: specialistObj.id,
       specialistName: specialistObj.name,
       date: formData.date,
@@ -231,7 +212,11 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (isSupabaseActive) {
       const { data, error } = await saveAppointmentToSupabase(newAppointment);
-      if (!error && data) {
+      if (error) {
+        showToast('Error al guardar cita', 'error');
+        throw error;
+      }
+      if (data) {
         setAppointments((prev) => [data, ...prev]);
         setCurrentAppointment(data);
         showToast('Cita guardada correctamente');
@@ -241,157 +226,115 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setAppointments((prev) => [newAppointment, ...prev]);
     setCurrentAppointment(newAppointment);
-    showToast(`¡Cita ${newAppointment.referenceCode} agendada con éxito!`);
+    showToast(`¡Cita agendada con éxito!`);
     return newAppointment;
   };
 
   const updateAppointmentStatus = async (id: string, status: Appointment['status']) => {
-    if (isSupabaseActive) {
-      await updateAppointmentStatusInSupabase(id, status);
-    }
-    setAppointments((prev) =>
-      prev.map((app) => (app.id === id ? { ...app, status } : app))
-    );
-    showToast(`Estado de cita actualizado a: ${status}`);
+    if (isSupabaseActive) await updateAppointmentStatusInSupabase(id, status);
+    setAppointments((prev) => prev.map((app) => (app.id === id ? { ...app, status } : app)));
+    showToast(`Estado actualizado a: ${status}`);
   };
 
   const deleteAppointment = async (id: string) => {
-    if (isSupabaseActive) {
-      await deleteRecordFromSupabase('appointments', id);
-    }
+    if (isSupabaseActive) await deleteRecordFromSupabase('appointments', id);
     setAppointments((prev) => prev.filter((app) => app.id !== id));
     showToast('Cita eliminada', 'info');
   };
 
-  // SERVICES CRUD (Nota: El persistir hacia Supabase desde aquí será el siguiente paso del SaaS)
-  const addService = (newService: Omit<Service, 'id'>) => {
-    const serviceWithId: Service = {
-      ...newService,
-      id: `srv-${Date.now()}`, // En el futuro cambiaremos esto por generación de UUID si guardas desde admin
-      isActive: newService.isActive ?? true,
-      durationMinutes: newService.durationMinutes ?? newService.duration ?? 60,
-      duration: newService.durationMinutes ?? newService.duration ?? 60,
-      rating: newService.rating ?? 5.0,
-      reviewsCount: newService.reviewsCount ?? 1,
-      imageUrl: newService.imageUrl || newService.image || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800',
-      image: newService.image || newService.imageUrl || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800',
-    };
-    setServices((prev) => [serviceWithId, ...prev]);
-    showToast(`Servicio "${newService.name}" creado con éxito`);
+  // --- SERVICES CRUD ---
+  const addService = async (newService: Omit<Service, 'id'>) => {
+    if (isSupabaseActive) {
+      const { data, error } = await saveServiceToSupabase(newService);
+      if (error || !data) return showToast('Error al crear servicio', 'error');
+      setServices((prev) => [data as Service, ...prev]);
+    } else {
+      setServices((prev) => [{ ...newService, id: `srv-${Date.now()}` } as Service, ...prev]);
+    }
+    showToast(`Servicio "${newService.name}" creado`);
   };
 
-  const updateService = (id: string, updatedData: Partial<Service>) => {
-    setServices((prev) =>
-      prev.map((srv) => {
-        if (srv.id === id) {
-          const updated = { ...srv, ...updatedData };
-          if (updatedData.durationMinutes !== undefined) updated.duration = updatedData.durationMinutes;
-          if (updatedData.imageUrl) updated.image = updatedData.imageUrl;
-          else if (updatedData.image) updated.imageUrl = updatedData.image;
-          return updated;
-        }
-        return srv;
-      })
-    );
-    showToast('Servicio actualizado con éxito');
+  const updateService = async (id: string, updatedData: Partial<Service>) => {
+    if (isSupabaseActive) await updateServiceInSupabase(id, updatedData);
+    setServices((prev) => prev.map((srv) => srv.id === id ? { ...srv, ...updatedData } : srv));
+    showToast('Servicio actualizado');
   };
 
-  const toggleServiceActive = (id: string) => {
-    setServices((prev) =>
-      prev.map((srv) => {
-        if (srv.id === id) {
-          const nextActive = !srv.isActive;
-          showToast(`Servicio ${nextActive ? 'activado' : 'pausado'}`, 'info');
-          return { ...srv, isActive: nextActive };
-        }
-        return srv;
-      })
-    );
+  const toggleServiceActive = async (id: string) => {
+    const service = services.find(s => s.id === id);
+    if (!service) return;
+    const nextActive = !service.isActive;
+    if (isSupabaseActive) await updateServiceInSupabase(id, { isActive: nextActive });
+    
+    setServices((prev) => prev.map((srv) => srv.id === id ? { ...srv, isActive: nextActive } : srv));
+    showToast(`Servicio ${nextActive ? 'activado' : 'pausado'}`, 'info');
   };
 
-  const deleteService = (id: string) => {
+  const deleteService = async (id: string) => {
+    if (isSupabaseActive) await deleteRecordFromSupabase('services', id);
     setServices((prev) => prev.filter((s) => s.id !== id));
     showToast('Servicio eliminado', 'info');
   };
 
-  // SPECIALISTS CRUD
-  const addSpecialist = (newSpec: Omit<Specialist, 'id'>) => {
-    const specWithId: Specialist = {
-      ...newSpec,
-      id: `spec-${Date.now()}`,
-      isActive: newSpec.isActive ?? true,
-      role: newSpec.role || newSpec.title || 'Especialista en Belleza',
-      title: newSpec.title || newSpec.role || 'Especialista en Belleza',
-      avatarUrl: newSpec.avatarUrl || newSpec.photo || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400',
-      photo: newSpec.photo || newSpec.avatarUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400',
-      rating: newSpec.rating ?? 5.0,
-      reviewsCount: newSpec.reviewsCount ?? 1,
-      availableDays: newSpec.availableDays || ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
-    };
-    setSpecialists((prev) => [...prev, specWithId]);
-    showToast(`Especialista "${newSpec.name}" agregada con éxito`);
+  // --- SPECIALISTS CRUD ---
+  const addSpecialist = async (newSpec: Omit<Specialist, 'id'>) => {
+    if (isSupabaseActive) {
+      const { data, error } = await saveSpecialistToSupabase(newSpec);
+      if (error || !data) return showToast('Error al crear especialista', 'error');
+      setSpecialists((prev) => [...prev, data as Specialist]);
+    } else {
+      setSpecialists((prev) => [...prev, { ...newSpec, id: `spec-${Date.now()}` } as Specialist]);
+    }
+    showToast(`Especialista "${newSpec.name}" agregada`);
   };
 
-  const updateSpecialist = (id: string, updatedData: Partial<Specialist>) => {
-    setSpecialists((prev) =>
-      prev.map((spec) => {
-        if (spec.id === id) {
-          const updated = { ...spec, ...updatedData };
-          if (updatedData.role) updated.title = updatedData.role;
-          if (updatedData.title) updated.role = updatedData.title;
-          if (updatedData.avatarUrl) updated.photo = updatedData.avatarUrl;
-          if (updatedData.photo) updated.avatarUrl = updatedData.photo;
-          return updated;
-        }
-        return spec;
-      })
-    );
-    showToast('Especialista actualizada con éxito');
+  const updateSpecialist = async (id: string, updatedData: Partial<Specialist>) => {
+    if (isSupabaseActive) await updateSpecialistInSupabase(id, updatedData);
+    setSpecialists((prev) => prev.map((spec) => spec.id === id ? { ...spec, ...updatedData } : spec));
+    showToast('Especialista actualizada');
   };
 
-  const toggleSpecialistActive = (id: string) => {
-    setSpecialists((prev) =>
-      prev.map((spec) => {
-        if (spec.id === id) {
-          const nextActive = !spec.isActive;
-          showToast(`Especialista estado: ${nextActive ? 'Activa' : 'Pausada'}`, 'info');
-          return { ...spec, isActive: nextActive };
-        }
-        return spec;
-      })
-    );
+  const toggleSpecialistActive = async (id: string) => {
+    const spec = specialists.find(s => s.id === id);
+    if (!spec) return;
+    const nextActive = !spec.isActive;
+    if (isSupabaseActive) await updateSpecialistInSupabase(id, { isActive: nextActive });
+
+    setSpecialists((prev) => prev.map((sp) => sp.id === id ? { ...sp, isActive: nextActive } : sp));
+    showToast(`Especialista ${nextActive ? 'Activa' : 'Pausada'}`, 'info');
   };
 
-  const deleteSpecialist = (id: string) => {
+  const deleteSpecialist = async (id: string) => {
+    if (isSupabaseActive) await deleteRecordFromSupabase('specialists', id);
     setSpecialists((prev) => prev.filter((sp) => sp.id !== id));
     showToast('Especialista eliminada', 'info');
   };
 
-  // PORTFOLIO CRUD
-  const addPortfolioItem = (newItem: Omit<PortfolioItem, 'id'>) => {
-    const itemWithId: PortfolioItem = {
-      ...newItem,
-      id: `gal-${Date.now()}`,
-      likes: newItem.likes ?? 0,
-      image: newItem.image || newItem.imageUrl,
-      imageUrl: newItem.imageUrl || newItem.image || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800',
-    };
-    setPortfolio((prev) => [itemWithId, ...prev]);
+  // --- PORTFOLIO CRUD ---
+  const addPortfolioItem = async (newItem: Omit<PortfolioItem, 'id'>) => {
+    if (isSupabaseActive) {
+      const { data, error } = await savePortfolioItemToSupabase(newItem);
+      if (error || !data) return showToast('Error al agregar foto', 'error');
+      setPortfolio((prev) => [data as PortfolioItem, ...prev]);
+    } else {
+      setPortfolio((prev) => [{ ...newItem, id: `gal-${Date.now()}` } as PortfolioItem, ...prev]);
+    }
     showToast('Foto agregada a la galería');
   };
 
-  const deletePortfolioItem = (id: string) => {
+  const deletePortfolioItem = async (id: string) => {
+    if (isSupabaseActive) await deleteRecordFromSupabase('portfolio_items', id);
     setPortfolio((prev) => prev.filter((item) => item.id !== id));
-    showToast('Foto eliminada de la galería', 'info');
+    showToast('Foto eliminada', 'info');
   };
 
-  // ADMIN AUTH
+  // --- ADMIN AUTH ---
   const loginAdmin = (password: string): boolean => {
     if (password === 'admin123' || password === 'admin') {
       setIsAdminLoggedIn(true);
       localStorage.setItem('luxenail_admin_auth', 'true');
       setIsAdminModalOpen(false);
-      showToast('Acceso concedido como Administrador');
+      showToast('Acceso concedido');
       return true;
     }
     return false;
@@ -400,7 +343,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const logoutAdmin = () => {
     setIsAdminLoggedIn(false);
     localStorage.removeItem('luxenail_admin_auth');
-    showToast('Sesión de administración cerrada', 'info');
+    showToast('Sesión cerrada', 'info');
   };
 
   const openAdminModal = () => setIsAdminModalOpen(true);
@@ -409,49 +352,16 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <BookingContext.Provider
       value={{
-        services,
-        specialists,
-        appointments,
-        portfolio,
-        isLoadingData, // Exportado para la UI
-        selectedService,
-        setSelectedService,
-        selectedSpecialist,
-        setSelectedSpecialist,
-        isBookingModalOpen,
-        openBookingModal,
-        closeBookingModal,
-        currentAppointment,
-        setCurrentAppointment,
-        bcvInfo,
-        bcvRate: bcvInfo.rate,
-        isBcvLoading,
-        refreshBcvRate,
-        formatBsAmount,
-        createAppointment,
-        updateAppointmentStatus,
-        deleteAppointment,
-        addService,
-        updateService,
-        toggleServiceActive,
-        deleteService,
-        addSpecialist,
-        updateSpecialist,
-        toggleSpecialistActive,
-        deleteSpecialist,
-        addPortfolioItem,
-        deletePortfolioItem,
-        isAdminLoggedIn,
-        loginAdmin,
-        logoutAdmin,
-        isAdminModalOpen,
-        openAdminModal,
-        closeAdminModal,
-        activeAdminTab,
-        setActiveAdminTab,
-        toast,
-        showToast,
-        isSupabaseActive,
+        services, specialists, appointments, portfolio, isLoadingData,
+        selectedService, setSelectedService, selectedSpecialist, setSelectedSpecialist,
+        isBookingModalOpen, openBookingModal, closeBookingModal, currentAppointment, setCurrentAppointment,
+        bcvInfo, bcvRate: bcvInfo.rate, isBcvLoading, refreshBcvRate, formatBsAmount,
+        createAppointment, updateAppointmentStatus, deleteAppointment,
+        addService, updateService, toggleServiceActive, deleteService,
+        addSpecialist, updateSpecialist, toggleSpecialistActive, deleteSpecialist,
+        addPortfolioItem, deletePortfolioItem,
+        isAdminLoggedIn, loginAdmin, logoutAdmin, isAdminModalOpen, openAdminModal, closeAdminModal,
+        activeAdminTab, setActiveAdminTab, toast, showToast, isSupabaseActive,
       }}
     >
       {children}
@@ -461,8 +371,6 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 export const useBooking = () => {
   const context = useContext(BookingContext);
-  if (!context) {
-    throw new Error('useBooking debe usarse dentro de un BookingProvider');
-  }
+  if (!context) throw new Error('useBooking debe usarse dentro de un BookingProvider');
   return context;
 };
