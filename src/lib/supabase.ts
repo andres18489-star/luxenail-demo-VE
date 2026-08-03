@@ -56,6 +56,32 @@ function mapRowToAppointment(row: any): Appointment {
 /**
  * Inserta una cita respetando el esquema estricto de Supabase
  */
+// Extraer Servicios
+export async function fetchServicesFromSupabase() {
+  if (!supabase) return { data: null, error: new Error('Supabase no configurado.') };
+  
+  try {
+    const { data, error } = await supabase.from('services').select('*').eq('isActive', true);
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err : new Error('Error al obtener servicios') };
+  }
+}
+
+// Extraer Especialistas
+export async function fetchSpecialistsFromSupabase() {
+  if (!supabase) return { data: null, error: new Error('Supabase no configurado.') };
+  
+  try {
+    const { data, error } = await supabase.from('specialists').select('*').eq('isActive', true);
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err : new Error('Error al obtener especialistas') };
+  }
+}
+
 export async function saveAppointmentToSupabase(
   appointment: Omit<Appointment, 'id'>
 ): Promise<{ data: Appointment | null; error: Error | null }> {
