@@ -26,50 +26,59 @@ export const FullServices: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. DIAGNÓSTICO EN CONSOLA (Abre F12 -> Consola en tu navegador para ver qué llega de Supabase)
-  console.log('--- SERVICIOS Y SUS CATEGORÍAS REALES ---');
-  services.forEach(s => console.log(`Servicio: "${s.name}" | Categoría: "${s.category}"`));
-
   const activeServices = services.filter((s) => s.isActive !== false);
 
   const filteredServices = activeServices.filter((service) => {
-    if (selectedCategory === 'Todos') {
-      const normQuery = normalizeText(searchQuery);
-      return (
-        !normQuery ||
-        normalizeText(service.name).includes(normQuery) ||
-        normalizeText(service.description).includes(normQuery)
-      );
-    }
-
-    const normSelected = normalizeText(selectedCategory);
-    // Extraemos la categoría del servicio buscando en múltiples propiedades por si acaso
-    const rawCategory = service.category || (service as any).categoria || '';
-    const normServiceCat = normalizeText(rawCategory);
-
-    // Comparación súper permisiva
-    const matchesCategory =
-      normServiceCat === normSelected ||
-      normServiceCat.includes(normSelected) ||
-      normSelected.includes(normServiceCat) ||
-      // Soporta "Arte & Diseños" vs "Arte y Diseños" o simplemente "Arte" / "Diseño"
-      (normSelected.includes('arte') && normServiceCat.includes('arte')) ||
-      (normSelected.includes('lashes') && (normServiceCat.includes('pesta') || normServiceCat.includes('lashes')));
-
+    // 1. Filtrado por Búsqueda Manual (Input de Texto)
     const normQuery = normalizeText(searchQuery);
     const matchesSearch =
       !normQuery ||
       normalizeText(service.name).includes(normQuery) ||
       normalizeText(service.description).includes(normQuery);
 
-    return matchesCategory && matchesSearch;
+    if (!matchesSearch) return false;
+
+    // 2. Filtrado por Categoría
+    if (selectedCategory === 'Todos') return true;
+
+    const normSelected = normalizeText(selectedCategory);
+    const normServiceCat = normalizeText(service.category || (service as any).categoria || '');
+    const normName = normalizeText(service.name);
+    const normDesc = normalizeText(service.description);
+
+    // Coincidencia directa de la categoría registrada
+    const isDirectMatch =
+      normServiceCat === normSelected ||
+      normServiceCat.includes(normSelected) ||
+      normSelected.includes(normServiceCat);
+
+    if (isDirectMatch) return true;
+
+    // Fallbacks inteligentes según el botón seleccionado en caso de que en la BD la categoría esté guardada con otro nombre
+    if (normSelected.includes('manicura')) {
+      return normName.includes('manicura') || normDesc.includes('manicura') || normName.includes('uñas') || normName.includes('gel');
+    }
+    if (normSelected.includes('pedicura')) {
+      return normName.includes('pedicura') || normDesc.includes('pedicura') || normName.includes('pies');
+    }
+    if (normSelected.includes('extension') || normSelected.includes('extensi')) {
+      return normName.includes('extension') || normName.includes('soft gel') || normName.includes('acrilico') || normName.includes('polygel');
+    }
+    if (normSelected.includes('arte') || normSelected.includes('diseno')) {
+      return normName.includes('arte') || normName.includes('diseño') || normName.includes('nail art') || normDesc.includes('diseño');
+    }
+    if (normSelected.includes('lashes') || normSelected.includes('brows')) {
+      return normName.includes('pestañ') || normName.includes('ceja') || normName.includes('lash') || normName.includes('brow');
+    }
+
+    return false;
   });
 
   return (
     <section id="services" className="py-20 bg-amber-50/30 border-y border-rose-100/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Section Header */}
+        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold tracking-wide uppercase">
             <Sparkles className="w-3.5 h-3.5 text-rose-500" />
@@ -83,9 +92,8 @@ export const FullServices: React.FC = () => {
           </p>
         </div>
 
-        {/* Controls: Search & Category Filter Tabs */}
+        {/* Controls */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
-          {/* Category Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar">
             {CATEGORIES.map((cat) => (
               <button
@@ -102,7 +110,6 @@ export const FullServices: React.FC = () => {
             ))}
           </div>
 
-          {/* Search Input */}
           <div className="relative w-full md:w-72">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
@@ -115,23 +122,18 @@ export const FullServices: React.FC = () => {
           </div>
         </div>
 
-        {/* Service List */}
+        {/* List Grid */}
         {filteredServices.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-3xl border border-rose-100">
-            <p className="text-zinc-500 text-sm font-medium">
-              No se encontraron servicios en la categoría <strong>"{selectedCategory}"</strong>.
-            </p>
-            <p className="text-xs text-zinc-400 mt-1">
-              (Sugerencia: Revisa en la consola F12 cómo están guardadas las categorías en la base de datos)
-            </p>
+            <p className="text-zinc-500 text-sm font-medium">No se encontraron servicios disponibles para este filtro.</p>
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('Todos');
               }}
-              className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-full text-xs font-semibold hover:bg-rose-700 transition-colors cursor-pointer"
+              className="mt-3 text-xs font-semibold text-rose-600 underline cursor-pointer"
             >
-              Ver Todos los Servicios
+              Restablecer Filtros
             </button>
           </div>
         ) : (
@@ -142,7 +144,6 @@ export const FullServices: React.FC = () => {
                 className="bg-white rounded-3xl p-5 border border-rose-100 hover:border-rose-300/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
               >
                 <div>
-                  {/* Top Service Image Container */}
                   <div className="relative rounded-2xl overflow-hidden aspect-[16/9] mb-4 bg-zinc-100 border border-rose-100/60">
                     <img
                       src={service.imageUrl || service.image || FALLBACK_IMAGE}
@@ -153,14 +154,12 @@ export const FullServices: React.FC = () => {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
 
-                    {/* Category Badge Overlay */}
                     <div className="absolute top-3 left-3 z-10">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm">
-                        {service.category || 'General'}
+                        {service.category || 'Servicio'}
                       </span>
                     </div>
 
-                    {/* Top Right Status Badges */}
                     <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
                       {service.popular && (
                         <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 backdrop-blur-md px-2.5 py-1 rounded-full border border-amber-200/80 shadow-sm">
@@ -174,7 +173,6 @@ export const FullServices: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Header Title & Price (USD and BCV) */}
                   <div className="flex items-start justify-between gap-4 mb-2">
                     <h3 className="font-serif font-bold text-xl text-zinc-900 group-hover:text-rose-600 transition-colors">
                       {service.name}
