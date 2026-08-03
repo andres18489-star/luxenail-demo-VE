@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useBooking } from '../context/BookingContext';
-import { AppointmentStatus, Service, Specialist, PortfolioItem, ServiceCategory } from '../types';
+import { AppointmentStatus, Service, Specialist, ServiceCategory } from '../types';
 import {
   Calendar,
   Sparkles,
@@ -26,6 +26,9 @@ import {
   X
 } from 'lucide-react';
 
+const DEFAULT_SERVICE_IMG = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
+const DEFAULT_AVATAR_IMG = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400';
+
 export const AdminPanel: React.FC = () => {
   const {
     isAdminLoggedIn,
@@ -50,7 +53,6 @@ export const AdminPanel: React.FC = () => {
     activeAdminTab,
     setActiveAdminTab,
     isSupabaseActive,
-    bcvRate,
     formatBsAmount,
   } = useBooking();
 
@@ -105,65 +107,51 @@ export const AdminPanel: React.FC = () => {
     );
   }
 
-  // Dashboard Stats
+  // Dashboard Stats (Estandarización de estados)
   const totalBookings = appointments.length;
-  const pendingCount = appointments.filter((a) => a.status === 'Pendiente' || a.status === 'Pending').length;
-  const confirmedCount = appointments.filter((a) => a.status === 'Confirmada' || a.status === 'Confirmed').length;
+  const pendingCount = appointments.filter((a) => a.status.toLowerCase().includes('pendiente') || a.status.toLowerCase().includes('pending')).length;
+  const confirmedCount = appointments.filter((a) => a.status.toLowerCase().includes('confirmad') || a.status.toLowerCase().includes('confirmed')).length;
   const totalEstimatedRevenueUsd = appointments
-    .filter((a) => a.status !== 'Cancelada' && a.status !== 'Cancelled')
+    .filter((a) => !a.status.toLowerCase().includes('cancel'))
     .reduce((sum, a) => sum + a.servicePrice, 0);
 
   // Filter Appointments
   const filteredAppointments = appointments.filter((app) => {
     const matchesStatus = statusFilter === 'All' || app.status === statusFilter;
+    const searchLower = searchQuery.toLowerCase();
     const matchesSearch =
-      app.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.referenceCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.serviceName.toLowerCase().includes(searchQuery.toLowerCase());
+      app.customerName.toLowerCase().includes(searchLower) ||
+      app.customerEmail.toLowerCase().includes(searchLower) ||
+      app.referenceCode.toLowerCase().includes(searchLower) ||
+      app.serviceName.toLowerCase().includes(searchLower);
     return matchesStatus && matchesSearch;
   });
 
-  // Handle Service Submit (Create or Update)
+  // Handle Service Submit
   const handleServiceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!srvName.trim() || !srvDesc.trim()) return;
 
-    const imageUrlValue = srvImage.trim() || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800';
+    const imageUrlValue = srvImage.trim() || DEFAULT_SERVICE_IMG;
+
+    const payload = {
+      name: srvName,
+      category: srvCategory,
+      price: Number(srvPrice),
+      durationMinutes: Number(srvDuration),
+      description: srvDesc,
+      popular: srvPopular,
+      imageUrl: imageUrlValue,
+      image: imageUrlValue,
+    };
 
     if (editingServiceId) {
-      updateService(editingServiceId, {
-        name: srvName,
-        category: srvCategory,
-        price: Number(srvPrice),
-        durationMinutes: Number(srvDuration),
-        description: srvDesc,
-        popular: srvPopular,
-        imageUrl: imageUrlValue,
-        image: imageUrlValue,
-      });
-      setEditingServiceId(null);
+      updateService(editingServiceId, payload);
     } else {
-      addService({
-        name: srvName,
-        category: srvCategory,
-        price: Number(srvPrice),
-        durationMinutes: Number(srvDuration),
-        description: srvDesc,
-        popular: srvPopular,
-        isActive: true,
-        imageUrl: imageUrlValue,
-        image: imageUrlValue,
-      });
+      addService({ ...payload, isActive: true });
     }
 
-    // Reset Form
-    setSrvName('');
-    setSrvDesc('');
-    setSrvPrice(25);
-    setSrvDuration(60);
-    setSrvPopular(false);
-    setSrvImage('');
+    cancelEditService();
   };
 
   const startEditService = (service: Service) => {
@@ -192,31 +180,23 @@ export const AdminPanel: React.FC = () => {
     e.preventDefault();
     if (!specName.trim()) return;
 
-    const avatarValue = specAvatar.trim() || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400';
+    const avatarValue = specAvatar.trim() || DEFAULT_AVATAR_IMG;
+
+    const payload = {
+      name: specName,
+      role: specRole,
+      title: specRole,
+      phone: specPhone,
+      specialty: specSpecialty,
+      avatarUrl: avatarValue,
+      photo: avatarValue,
+      bio: specBio,
+    };
 
     if (editingSpecId) {
-      updateSpecialist(editingSpecId, {
-        name: specName,
-        role: specRole,
-        title: specRole,
-        phone: specPhone,
-        specialty: specSpecialty,
-        avatarUrl: avatarValue,
-        photo: avatarValue,
-        bio: specBio,
-      });
+      updateSpecialist(editingSpecId, payload);
     } else {
-      addSpecialist({
-        name: specName,
-        role: specRole || 'Master Nail Artist',
-        title: specRole || 'Master Nail Artist',
-        phone: specPhone || '+58 412 9876543',
-        specialty: specSpecialty || 'Estructura & Manicura Rusa',
-        avatarUrl: avatarValue,
-        photo: avatarValue,
-        bio: specBio || 'Especialista certificada comprometida con la excelencia y salud de la uña.',
-        isActive: true,
-      });
+      addSpecialist({ ...payload, isActive: true });
     }
 
     closeSpecModal();
@@ -226,10 +206,10 @@ export const AdminPanel: React.FC = () => {
     setEditingSpecId(null);
     setSpecName('');
     setSpecRole('Master Nail Specialist');
-    setSpecPhone('+58 412 9876543');
+    setSpecPhone('');
     setSpecSpecialty('Manicura Rusa & Acrílico');
-    setSpecAvatar('https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400');
-    setSpecBio('Especialista certificada internacionalmente.');
+    setSpecAvatar(DEFAULT_AVATAR_IMG);
+    setSpecBio('Especialista certificada.');
     setIsSpecModalOpen(true);
   };
 
@@ -257,10 +237,10 @@ export const AdminPanel: React.FC = () => {
     addPortfolioItem({
       title: portTitle,
       category: portCategory,
-      artist: portArtist || 'Valeria Mendoza',
+      artist: portArtist || 'Especialista',
       imageUrl: portImageUrl,
       image: portImageUrl,
-      likes: Math.floor(Math.random() * 50) + 10,
+      likes: 0,
     });
 
     setPortTitle('');
@@ -278,19 +258,18 @@ export const AdminPanel: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <h2 className="font-serif font-bold text-2xl text-white">Panel de Control Administrativo & Motor CRUD</h2>
+              <h2 className="font-serif font-bold text-2xl text-white">Panel de Control Administrativo</h2>
             </div>
             <p className="text-xs text-zinc-400 mt-1">
-              Administrador Activo • LuxeNail Studio VE (Las Mercedes, Caracas)
+              Administrador Activo • LuxeNail Studio VE
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Database Status */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
               <Database className={`w-3.5 h-3.5 ${isSupabaseActive ? 'text-emerald-400' : 'text-amber-400'}`} />
               <span>
-                Base de Datos: <strong>{isSupabaseActive ? 'Supabase Conectado' : 'Modo Local Clean Fallback'}</strong>
+                Base de Datos: <strong>{isSupabaseActive ? 'Supabase Conectado' : 'Modo Local (Fallback)'}</strong>
               </span>
             </div>
 
@@ -348,63 +327,36 @@ export const AdminPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* 4 Interactive Tabs Navigation */}
+        {/* Navigation Tabs */}
         <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setActiveAdminTab('appointments')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeAdminTab === 'appointments'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/40'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            Gestión de Citas ({appointments.length})
-          </button>
-
-          <button
-            onClick={() => setActiveAdminTab('services')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeAdminTab === 'services'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/40'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            Catálogo de Servicios ({services.length})
-          </button>
-
-          <button
-            onClick={() => setActiveAdminTab('specialists')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeAdminTab === 'specialists'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/40'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <Briefcase className="w-4 h-4" />
-            Personal y Especialistas ({specialists.length})
-          </button>
-
-          <button
-            onClick={() => setActiveAdminTab('portfolio')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeAdminTab === 'portfolio'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/40'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <ImageIcon className="w-4 h-4" />
-            Galería del Portafolio ({portfolio.length})
-          </button>
+          {[
+            { id: 'appointments', label: `Gestión de Citas (${appointments.length})`, icon: Calendar },
+            { id: 'services', label: `Catálogo de Servicios (${services.length})`, icon: Sparkles },
+            { id: 'specialists', label: `Personal y Especialistas (${specialists.length})`, icon: Briefcase },
+            { id: 'portfolio', label: `Galería del Portafolio (${portfolio.length})`, icon: ImageIcon },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeAdminTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveAdminTab(tab.id as any)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                  isActive
+                    ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/40'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* =========================================================================
-            TAB 1: APPOINTMENTS
-           ========================================================================= */}
+        {/* TAB 1: APPOINTMENTS */}
         {activeAdminTab === 'appointments' && (
           <div className="space-y-4">
-            {/* Filters */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-zinc-900/80 p-4 rounded-2xl border border-zinc-800">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -434,7 +386,6 @@ export const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Appointments Table */}
             <div className="bg-zinc-900/90 rounded-2xl border border-zinc-800 overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-zinc-300">
@@ -480,11 +431,11 @@ export const AdminPanel: React.FC = () => {
                           <td className="p-4">
                             <span
                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                app.status === 'Confirmada' || app.status === 'Confirmed'
+                                app.status.toLowerCase().includes('confirmad')
                                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : app.status === 'Pendiente' || app.status === 'Pending'
+                                  : app.status.toLowerCase().includes('pendient')
                                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                  : app.status === 'Completada' || app.status === 'Completed'
+                                  : app.status.toLowerCase().includes('complet')
                                   ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                   : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                               }`}
@@ -494,7 +445,7 @@ export const AdminPanel: React.FC = () => {
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {app.status !== 'Confirmada' && app.status !== 'Confirmed' && (
+                              {!app.status.toLowerCase().includes('confirmad') && (
                                 <button
                                   onClick={() => updateAppointmentStatus(app.id, 'Confirmada')}
                                   title="Confirmar Cita"
@@ -503,7 +454,7 @@ export const AdminPanel: React.FC = () => {
                                   <CheckCircle2 className="w-4 h-4" />
                                 </button>
                               )}
-                              {app.status !== 'Cancelada' && app.status !== 'Cancelled' && (
+                              {!app.status.toLowerCase().includes('cancel') && (
                                 <button
                                   onClick={() => updateAppointmentStatus(app.id, 'Cancelada')}
                                   title="Cancelar Cita"
@@ -531,20 +482,14 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* =========================================================================
-            TAB 2: SERVICES CATALOG
-           ========================================================================= */}
+        {/* TAB 2: SERVICES */}
         {activeAdminTab === 'services' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column: Form to Create/Edit Service */}
             <div className="bg-zinc-900/90 p-6 rounded-2xl border border-zinc-800 space-y-4 self-start">
               <h3 className="font-serif font-bold text-lg text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-rose-400" />
                 {editingServiceId ? 'Editar Servicio' : 'Agregar Nuevo Servicio'}
               </h3>
-              <p className="text-xs text-zinc-400">
-                Configura precios en USD (se convierten a Bs. en tiempo real con tasa BCV), fotos Unsplash y categoría.
-              </p>
 
               <form onSubmit={handleServiceSubmit} className="space-y-4">
                 <div>
@@ -580,7 +525,7 @@ export const AdminPanel: React.FC = () => {
                     <input
                       type="number"
                       required
-                      min={5}
+                      min={1}
                       value={srvPrice}
                       onChange={(e) => setSrvPrice(Number(e.target.value))}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-rose-500"
@@ -601,7 +546,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">URL de Imagen (Unsplash)</label>
+                  <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">URL de Imagen</label>
                   <input
                     type="url"
                     placeholder="https://images.unsplash.com/photo-..."
@@ -632,7 +577,7 @@ export const AdminPanel: React.FC = () => {
                     className="w-4 h-4 rounded accent-rose-500"
                   />
                   <label htmlFor="popular-check" className="text-xs text-zinc-300 font-medium cursor-pointer">
-                    Destacar en sección "Tratamientos Populares"
+                    Destacar en "Tratamientos Populares"
                   </label>
                 </div>
 
@@ -658,7 +603,6 @@ export const AdminPanel: React.FC = () => {
               </form>
             </div>
 
-            {/* Right Column: Existing Services List */}
             <div className="lg:col-span-2 space-y-4">
               <h3 className="font-serif font-bold text-lg text-white">Catálogo de Servicios ({services.length})</h3>
 
@@ -667,15 +611,13 @@ export const AdminPanel: React.FC = () => {
                   <div
                     key={srv.id}
                     className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
-                      srv.isActive
-                        ? 'bg-zinc-900/90 border-zinc-800'
-                        : 'bg-zinc-950/60 border-zinc-900 opacity-60'
+                      srv.isActive ? 'bg-zinc-900/90 border-zinc-800' : 'bg-zinc-950/60 border-zinc-900 opacity-60'
                     }`}
                   >
                     <div className="space-y-3">
                       <div className="relative h-32 rounded-xl overflow-hidden bg-zinc-950">
                         <img
-                          src={srv.imageUrl || srv.image || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800'}
+                          src={srv.imageUrl || srv.image || DEFAULT_SERVICE_IMG}
                           alt={srv.name}
                           className="w-full h-full object-cover"
                         />
@@ -740,9 +682,7 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* =========================================================================
-            TAB 3: STAFF & SPECIALISTS
-           ========================================================================= */}
+        {/* TAB 3: SPECIALISTS */}
         {activeAdminTab === 'specialists' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -765,43 +705,41 @@ export const AdminPanel: React.FC = () => {
                 <div
                   key={sp.id}
                   className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
-                    sp.isActive
-                      ? 'bg-zinc-900/90 border-zinc-800'
-                      : 'bg-zinc-950/60 border-zinc-900 opacity-60'
+                    sp.isActive ? 'bg-zinc-900/90 border-zinc-800' : 'bg-zinc-950/60 border-zinc-900 opacity-60'
                   }`}
                 >
                   <div className="space-y-4">
                     <div className="flex items-center gap-4">
                       <img
-                        src={sp.avatarUrl || sp.photo || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400'}
+                        src={sp.avatarUrl || sp.photo || DEFAULT_AVATAR_IMG}
                         alt={sp.name}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-rose-400/40"
                       />
                       <div>
                         <h4 className="font-bold text-base text-white">{sp.name}</h4>
                         <p className="text-xs text-rose-300 font-medium">{sp.role || sp.title}</p>
-                        <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-1">
-                          <Phone className="w-3 h-3 text-zinc-500" />
-                          {sp.phone || '+58 412 9876543'}
-                        </p>
+                        {sp.phone && (
+                          <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-1">
+                            <Phone className="w-3 h-3 text-zinc-500" />
+                            {sp.phone}
+                          </p>
+                        )}
                       </div>
                     </div>
 
                     <p className="text-xs text-zinc-300 bg-zinc-950/80 p-3 rounded-xl border border-zinc-800/80">
-                      {sp.bio || 'Especialista en LuxeNail Studio VE.'}
+                      {sp.bio || 'Sin biografía disponible.'}
                     </p>
 
-                    <div className="text-[11px] text-zinc-400 space-y-1">
-                      <p><strong>Especialidad:</strong> {sp.specialty || 'General Beauty'}</p>
+                    <div className="text-[11px] text-zinc-400">
+                      <p><strong>Especialidad:</strong> {sp.specialty || 'General'}</p>
                     </div>
                   </div>
 
                   <div className="pt-4 mt-4 border-t border-zinc-800 flex items-center justify-between">
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        sp.isActive
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        sp.isActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                       }`}
                     >
                       {sp.isActive ? 'Personal Activo' : 'Pausado / Turno Libre'}
@@ -878,6 +816,7 @@ export const AdminPanel: React.FC = () => {
                         <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">Teléfono WhatsApp</label>
                         <input
                           type="text"
+                          placeholder="+58 ..."
                           value={specPhone}
                           onChange={(e) => setSpecPhone(e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
@@ -937,18 +876,14 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* =========================================================================
-            TAB 4: PORTFOLIO GALLERY
-           ========================================================================= */}
+        {/* TAB 4: PORTFOLIO GALLERY */}
         {activeAdminTab === 'portfolio' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left: Add Portfolio Photo */}
             <div className="bg-zinc-900/90 p-6 rounded-2xl border border-zinc-800 space-y-4 self-start">
               <h3 className="font-serif font-bold text-lg text-white flex items-center gap-2">
                 <ImageIcon className="w-5 h-5 text-rose-400" />
                 Agregar Foto al Portafolio
               </h3>
-              <p className="text-xs text-zinc-400">Publica imágenes de trabajos realizados para exhibirlos a las clientas.</p>
 
               <form onSubmit={handlePortfolioSubmit} className="space-y-4">
                 <div>
@@ -983,7 +918,7 @@ export const AdminPanel: React.FC = () => {
                     <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">Nombre de la Artista</label>
                     <input
                       type="text"
-                      placeholder="Valeria Mendoza"
+                      placeholder="Ej. Valeria Mendoza"
                       value={portArtist}
                       onChange={(e) => setPortArtist(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
@@ -992,7 +927,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">URL de Imagen Unsplash</label>
+                  <label className="text-[11px] font-bold text-zinc-300 uppercase block mb-1">URL de Imagen</label>
                   <input
                     type="url"
                     required
@@ -1013,7 +948,6 @@ export const AdminPanel: React.FC = () => {
               </form>
             </div>
 
-            {/* Right: Portfolio Grid */}
             <div className="lg:col-span-2 space-y-4">
               <h3 className="font-serif font-bold text-lg text-white">Galería de Trabajos ({portfolio.length})</h3>
 
@@ -1021,7 +955,7 @@ export const AdminPanel: React.FC = () => {
                 {portfolio.map((item) => (
                   <div key={item.id} className="group relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900">
                     <img
-                      src={item.imageUrl || item.image || 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=800'}
+                      src={item.imageUrl || item.image || DEFAULT_SERVICE_IMG}
                       alt={item.title}
                       className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                     />

@@ -1,5 +1,8 @@
 import React from 'react';
 import { BookingProvider } from './context/BookingContext';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './context/ProtectedRoute';
+
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { PopularServices } from './components/PopularServices';
@@ -15,25 +18,31 @@ import { ToastNotification } from './components/ToastNotification';
 
 export default function App() {
   return (
-    <BookingProvider>
-      <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-rose-200 selection:text-rose-900">
-        <Navbar />
-        <main>
-          <Hero />
-          <PopularServices />
-          <FullServices />
-          <GallerySection />
-          <StaffSection />
-          <LocationContact />
-          <AdminPanel />
-        </main>
-        <Footer />
+    <AuthProvider>
+      <BookingProvider>
+        <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-rose-200 selection:text-rose-900">
+          <Navbar />
+          <main>
+            <Hero />
+            <PopularServices />
+            <FullServices />
+            <GallerySection />
+            <StaffSection />
+            <LocationContact />
+            
+            {/* El AdminPanel queda resguardado con Supabase Auth */}
+            <ProtectedRoute>
+              <AdminPanel />
+            </ProtectedRoute>
+          </main>
+          <Footer />
 
-        {/* Modals & Overlay Alerts */}
-        <BookingModal />
-        <AdminLoginModal />
-        <ToastNotification />
-      </div>
-    </BookingProvider>
+          {/* Modales y Notificaciones */}
+          <BookingModal />
+          <AdminLoginModal />
+          <ToastNotification />
+        </div>
+      </BookingProvider>
+    </AuthProvider>
   );
 }
