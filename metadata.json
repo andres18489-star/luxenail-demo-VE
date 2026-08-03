@@ -1,0 +1,6 @@
+{
+  "name": "LuxeNail Studio VE",
+  "description": "Estudio de Uñas y Estética en Las Mercedes, Caracas. Precios dobles USD y Tasa BCV, reserva con confirmación por WhatsApp y panel de administración CRUD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
