@@ -162,8 +162,19 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           fetchPortfolioFromSupabase()
         ]);
 
+        // 🔍 DIAGNÓSTICO: Inspeccionamos la respuesta cruda de servicios desde Supabase
+        console.log('🔍 [DEBUG] Respuesta RAW de servicios desde Supabase:', servRes.data);
+
         if (appRes.data) setAppointments(appRes.data);
-        if (servRes.data) setServices(servRes.data);
+        if (servRes.data) {
+          setServices(servRes.data);
+          // 🔍 DIAGNÓSTICO: Desglosamos solo las imágenes de cada servicio recibido
+          console.log('🔍 [DEBUG] URLs de imágenes mapeadas en servicios:', servRes.data.map(s => ({
+            id: s.id,
+            name: s.name,
+            imageUrl: (s as any).imageUrl || (s as any).image_url || (s as any).image
+          })));
+        }
         if (specRes.data) setSpecialists(specRes.data);
         if (portRes.data) setPortfolio(portRes.data);
       } catch (error) {
@@ -304,7 +315,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     showToast(`Especialista ${nextActive ? 'Activa' : 'Pausada'}`, 'info');
   };
 
-  const deleteSpecialist = async (id: string) => {
+const deleteSpecialist = async (id: string) => {
     if (isSupabaseActive) await deleteRecordFromSupabase('specialists', id);
     setSpecialists((prev) => prev.filter((sp) => sp.id !== id));
     showToast('Especialista eliminada', 'info');
