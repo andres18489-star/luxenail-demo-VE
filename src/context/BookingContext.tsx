@@ -20,6 +20,7 @@ import {
   isSupabaseConfigured,
 } from '../lib/supabase';
 import { fetchBcvRate, BcvRateResponse, formatBs, calculateBs } from '../services/bcvService';
+import { syncMockDataToSupabase } from '../services/seedService';
 
 interface Toast {
   message: string;
@@ -160,15 +161,23 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [bcvInfo.rate]);
 
   // Load appointments from Supabase if configured
-  useEffect(() => {
+// CÓDIGO ACTUALIZADO:
+useEffect(() => {
+  const initSupabaseData = async () => {
     if (isSupabaseActive) {
-      fetchAppointmentsFromSupabase().then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          setAppointments(data);
-        }
-      });
+      // 1. Verificar y poblar las tablas si están vacías
+      await syncMockDataToSupabase();
+
+      // 2. Cargar las citas existentes desde Supabase
+      const { data, error } = await fetchAppointmentsFromSupabase();
+      if (!error && data && data.length > 0) {
+        setAppointments(data);
+      }
     }
-  }, [isSupabaseActive]);
+  };
+
+  initSupabaseData();
+}, [isSupabaseActive]);
 
   // Persist state arrays to localStorage
   useEffect(() => {
